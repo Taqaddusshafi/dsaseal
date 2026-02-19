@@ -1,0 +1,40 @@
+{
+  "description": "Held-out evaluation set for SEAL-DSA. These questions should NOT be used during training.",
+  "topics": {
+    "arrays_strings": [
+      "Implement Kadane's algorithm for maximum subarray sum.",
+      "Given a sorted array, remove duplicates in-place and return the new length.",
+      "Find the longest substring without repeating characters."
+    ],
+    "linked_lists": [
+      "Merge K sorted linked lists into one sorted list.",
+      "Remove the Nth node from the end of a linked list in one pass.",
+      "Determine if a linked list is a palindrome."
+    ],
+    "stacks_queues": [
+      "Implement a circular queue with fixed capacity.",
+      "Find the largest rectangle in a histogram using a stack.",
+      "Design a stack that supports increment operations on bottom K elements."
+    ],
+    "trees": [
+      "Convert a sorted array to a balanced BST.",
+      "Find all root-to-leaf paths that sum to a target value.",
+      "Construct a binary tree from inorder and preorder traversals."
+    ],
+    "graphs": [
+      "Find the number of islands in a 2D grid.",
+      "Determine if a graph is bipartite.",
+      "Find the shortest path in a weighted graph using Bellman-Ford."
+    ],
+    "sorting_searching": [
+      "Find the Kth largest element in an unsorted array.",
+      "Search for a target in a rotated sorted array.",
+      "Implement counting sort and explain when it is preferred."
+    ],
+    "dynamic_programming": [
+      "Find the minimum edit distance between two strings.",
+      "Solve the coin change problem: minimum coins to make a target.",
+      "Find the length of the longest increasing subsequence."
+    ]
+  }
+}

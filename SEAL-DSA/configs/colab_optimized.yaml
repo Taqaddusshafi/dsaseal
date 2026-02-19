@@ -1,0 +1,39 @@
+# ============================================================
+# SEAL-DSA Colab-Optimized Configuration
+# ============================================================
+# Aggressive optimizations for Google Colab Free Tier
+# T4 GPU (15GB VRAM), 12.7GB RAM, ~12h session limit
+# ============================================================
+
+# Inherit from default and override
+_base_: "default.yaml"
+
+model:
+  name: "TinyLlama/TinyLlama-1.1B-Chat-v1.0" # Smallest viable model
+  max_length: 384 # Reduced for memory
+  quantization:
+    enabled: true
+    bits: 4
+
+lora:
+  r: 4 # Lower rank for speed
+  lora_alpha: 8
+  lora_dropout: 0.1 # Higher dropout for small data
+
+seal:
+  num_epochs: 3 # Fewer epochs to fit in session
+  questions_per_topic: 10 # Fewer questions
+  batch_size: 2 # Smaller batch
+  gradient_accumulation_steps: 8 # Keep effective batch = 16
+  learning_rate: 3.0e-4 # Slightly higher LR
+
+ewc:
+  lambda: 0.3
+  fisher_sample_size: 100 # Smaller sample
+
+checkpoint:
+  save_every_n_epochs: 1
+  save_to_drive: true # Critical for Colab disconnects
+
+hardware:
+  max_memory_mb: 12000 # Conservative for free tier

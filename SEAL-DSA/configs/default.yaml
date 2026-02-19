@@ -1,0 +1,107 @@
+# ============================================================
+# SEAL-DSA Default Configuration
+# ============================================================
+# Simplified SEAL Framework for DSA Education
+# Optimized for Google Colab Free Tier (T4 GPU, 15GB VRAM)
+# ============================================================
+
+# --- Model Configuration ---
+model:
+  # Recommended models (choose one):
+  # - "TinyLlama/TinyLlama-1.1B-Chat-v1.0"  (1.1B, fastest)
+  # - "Qwen/Qwen2.5-1.5B-Instruct"          (1.5B, balanced)
+  # - "microsoft/phi-2"                       (2.7B, best quality)
+  # - "Qwen/Qwen2.5-3B-Instruct"            (3B, high quality)
+  name: "Qwen/Qwen2.5-1.5B-Instruct"
+  max_length: 512
+  temperature: 0.7
+  top_p: 0.9
+  top_k: 50
+  do_sample: true
+
+  # Quantization (4-bit for Colab compatibility)
+  quantization:
+    enabled: true
+    bits: 4
+    quant_type: "nf4"
+    double_quant: true
+    compute_dtype: "bfloat16"
+
+# --- LoRA Configuration ---
+lora:
+  r: 8 # Rank of the low-rank matrices
+  lora_alpha: 16 # Scaling factor (alpha/r = scaling)
+  lora_dropout: 0.05 # Dropout for regularization
+  bias: "none" # No bias adaptation
+  task_type: "CAUSAL_LM" # Causal language modeling
+  target_modules: # Modules to apply LoRA
+    - "q_proj"
+    - "k_proj"
+    - "v_proj"
+    - "o_proj"
+
+# --- SEAL Loop Configuration ---
+seal:
+  num_epochs: 5 # Number of SEAL loop iterations
+  questions_per_topic: 20 # Questions generated per topic per epoch
+  batch_size: 4 # Micro-batch size
+  gradient_accumulation_steps: 4 # Effective batch = 16
+  learning_rate: 2.0e-4 # Learning rate for LoRA updates
+  warmup_steps: 10
+  max_grad_norm: 1.0 # Gradient clipping
+  weight_decay: 0.01
+  scheduler: "cosine" # LR scheduler type
+
+  # Self-evaluation thresholds
+  evaluation:
+    correctness_threshold: 0.7 # Min score to consider correct
+    quality_threshold: 0.5 # Min question quality score
+    improvement_threshold: 0.15 # Target improvement (15%)
+    forgetting_threshold: 0.05 # Max allowed forgetting (5%)
+
+# --- Curriculum Configuration ---
+curriculum:
+  strategy: "progressive" # progressive, random, or adaptive
+  weeks:
+    1: "arrays_strings"
+    2: "arrays_strings"
+    3: "linked_lists"
+    4: "linked_lists"
+    5: "stacks_queues"
+    6: "stacks_queues"
+    7: "trees"
+    8: "trees"
+    9: "graphs"
+    10: "graphs"
+    11: "sorting_searching"
+    12: "sorting_searching"
+    13: "dynamic_programming"
+    14: "dynamic_programming"
+    15: "advanced_topics"
+    16: "comprehensive_review"
+
+# --- EWC (Elastic Weight Consolidation) ---
+ewc:
+  enabled: true
+  lambda: 0.4 # Regularization strength
+  fisher_sample_size: 200 # Samples for Fisher Information Matrix
+
+# --- Checkpoint Configuration ---
+checkpoint:
+  save_every_n_epochs: 1
+  save_dir: "checkpoints"
+  max_checkpoints: 5 # Keep only last N checkpoints
+  save_to_drive: true # Save to Google Drive
+
+# --- Logging ---
+logging:
+  level: "INFO"
+  log_dir: "logs"
+  use_wandb: false # Set true for W&B tracking
+  wandb_project: "seal-dsa"
+
+# --- Hardware ---
+hardware:
+  device: "auto" # auto, cuda, cpu
+  mixed_precision: true # FP16/BF16 training
+  max_memory_mb: 14000 # ~14GB for T4

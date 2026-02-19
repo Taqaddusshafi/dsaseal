@@ -1,0 +1,39 @@
+# SEAL-DSA Requirements
+# Compatible with Google Colab Free Tier (Python 3.10+)
+
+# Core ML Framework
+torch>=2.1.0
+transformers>=4.36.0
+accelerate>=0.25.0
+peft>=0.7.0
+bitsandbytes>=0.41.0
+datasets>=2.16.0
+tokenizers>=0.15.0
+safetensors>=0.4.0
+
+# Training & Evaluation
+scikit-learn>=1.3.0
+numpy>=1.24.0
+scipy>=1.11.0
+rouge-score>=0.1.2
+nltk>=3.8.0
+evaluate>=0.4.0
+  
+# Visualization & Analysis
+matplotlib>=3.7.0
+seaborn>=0.12.0
+pandas>=2.0.0
+tqdm>=4.65.0
+wandb>=0.16.0  # Optional: for experiment tracking
+
+# Configuration
+pyyaml>=6.0
+omegaconf>=2.3.0
+
+# Utilities
+psutil>=5.9.0
+gputil>=1.4.0
+
+# Google Colab specific
+# google-colab  # Already available in Colab
+# google-auth   # Already available in Colab

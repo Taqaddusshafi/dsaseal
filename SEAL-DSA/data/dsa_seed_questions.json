@@ -1,0 +1,131 @@
+[
+  {
+    "topic": "arrays_strings",
+    "question": "Given an array of N integers, find two numbers that add up to a target sum. What is the most efficient approach?",
+    "difficulty": "medium",
+    "type": "problem_solving",
+    "expected_concepts": ["hash map", "O(n)", "two sum"]
+  },
+  {
+    "topic": "arrays_strings",
+    "question": "Explain the sliding window technique with an example problem.",
+    "difficulty": "medium",
+    "type": "conceptual",
+    "expected_concepts": ["sliding window", "subarray", "O(n)"]
+  },
+  {
+    "topic": "arrays_strings",
+    "question": "Write a function to find the maximum sum subarray of size K.",
+    "difficulty": "easy",
+    "type": "coding",
+    "expected_concepts": ["sliding window", "sum", "O(n)"]
+  },
+  {
+    "topic": "linked_lists",
+    "question": "How does Floyd's cycle detection algorithm work? Prove that the fast and slow pointers meet inside the cycle.",
+    "difficulty": "hard",
+    "type": "analytical",
+    "expected_concepts": ["floyd", "fast", "slow", "cycle", "O(n)"]
+  },
+  {
+    "topic": "linked_lists",
+    "question": "Write a function to reverse a singly linked list in-place.",
+    "difficulty": "easy",
+    "type": "coding",
+    "expected_concepts": ["reverse", "pointer", "prev", "next", "O(n)"]
+  },
+  {
+    "topic": "stacks_queues",
+    "question": "Design a Min Stack that supports push, pop, top, and getMin operations in O(1) time.",
+    "difficulty": "medium",
+    "type": "problem_solving",
+    "expected_concepts": ["stack", "O(1)", "min", "auxiliary"]
+  },
+  {
+    "topic": "stacks_queues",
+    "question": "Explain how to evaluate a postfix expression using a stack.",
+    "difficulty": "medium",
+    "type": "conceptual",
+    "expected_concepts": ["stack", "postfix", "operand", "operator"]
+  },
+  {
+    "topic": "trees",
+    "question": "Given a Binary Search Tree, find the Lowest Common Ancestor of two nodes.",
+    "difficulty": "medium",
+    "type": "problem_solving",
+    "expected_concepts": ["BST", "LCA", "left", "right", "O(h)"]
+  },
+  {
+    "topic": "trees",
+    "question": "Explain the four types of AVL tree rotations with diagrams.",
+    "difficulty": "hard",
+    "type": "conceptual",
+    "expected_concepts": ["AVL", "rotation", "LL", "RR", "LR", "RL", "balance"]
+  },
+  {
+    "topic": "graphs",
+    "question": "Implement Dijkstra's shortest path algorithm. Why does it fail with negative edge weights?",
+    "difficulty": "hard",
+    "type": "coding",
+    "expected_concepts": [
+      "dijkstra",
+      "priority queue",
+      "greedy",
+      "negative",
+      "relaxation"
+    ]
+  },
+  {
+    "topic": "graphs",
+    "question": "What is topological sorting? When is it applicable and what algorithms can compute it?",
+    "difficulty": "medium",
+    "type": "conceptual",
+    "expected_concepts": ["topological", "DAG", "DFS", "BFS", "Kahn"]
+  },
+  {
+    "topic": "sorting_searching",
+    "question": "Prove that comparison-based sorting algorithms have a lower bound of Ω(n log n).",
+    "difficulty": "hard",
+    "type": "analytical",
+    "expected_concepts": [
+      "decision tree",
+      "comparison",
+      "n log n",
+      "lower bound",
+      "leaf nodes"
+    ]
+  },
+  {
+    "topic": "sorting_searching",
+    "question": "Compare merge sort and quick sort. When would you choose one over the other?",
+    "difficulty": "medium",
+    "type": "conceptual",
+    "expected_concepts": [
+      "merge sort",
+      "quick sort",
+      "stable",
+      "in-place",
+      "O(n log n)"
+    ]
+  },
+  {
+    "topic": "dynamic_programming",
+    "question": "Solve the 0/1 Knapsack problem using dynamic programming. Define the state and transition.",
+    "difficulty": "hard",
+    "type": "problem_solving",
+    "expected_concepts": ["knapsack", "DP", "state", "transition", "O(nW)"]
+  },
+  {
+    "topic": "dynamic_programming",
+    "question": "What is the difference between memoization and tabulation in dynamic programming?",
+    "difficulty": "easy",
+    "type": "conceptual",
+    "expected_concepts": [
+      "memoization",
+      "tabulation",
+      "top-down",
+      "bottom-up",
+      "recursive"
+    ]
+  }
+]
