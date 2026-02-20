@@ -9,8 +9,8 @@
 _base_: "default.yaml"
 
 model:
-  name: "TinyLlama/TinyLlama-1.1B-Chat-v1.0" # Smallest viable model
-  max_length: 384 # Reduced for memory
+  name: "Qwen/Qwen2.5-1.5B-Instruct" # Upgraded production-level model
+  max_length: 1024 # Increased for complex coding problems
   quantization:
     enabled: true
     bits: 4
@@ -21,11 +21,11 @@ lora:
   lora_dropout: 0.1 # Higher dropout for small data
 
 seal:
-  num_epochs: 3 # Fewer epochs to fit in session
-  questions_per_topic: 10 # Fewer questions
-  batch_size: 2 # Smaller batch
+  num_epochs: 10 # Production training time
+  questions_per_topic: 20 # Train on more varied problems
+  batch_size: 2 # Keep small for Colab RAM
   gradient_accumulation_steps: 8 # Keep effective batch = 16
-  learning_rate: 3.0e-4 # Slightly higher LR
+  learning_rate: 2.0e-4 # Stable rate over longer training
 
 ewc:
   lambda: 0.3
