@@ -37,3 +37,8 @@ gputil>=1.4.0
 # Google Colab specific
 # google-colab  # Already available in Colab
 # google-auth   # Already available in Colab
+
+# Testing
+pytest>=7.0.0
+pytest-cov>=4.0.0
+mock>=5.0.0

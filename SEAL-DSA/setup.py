@@ -26,4 +26,11 @@ setup(
             "seal-dsa=seal_dsa.main:main",
         ],
     },
+    extras_require={
+        "test": [
+            "pytest>=7.0.0",
+            "pytest-cov>=4.0.0",
+            "mock>=5.0.0",
+        ],
+    },
 )
