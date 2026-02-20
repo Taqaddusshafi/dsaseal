@@ -59,15 +59,16 @@ Subtopic: {subtopic}
 Difficulty: {difficulty}
 Question Type: {question_type}
 
-Generate a clear, specific DSA question that tests understanding of the given topic.
+Generate a clear, specific, real-world DSA interview question that tests understanding of the given topic. 
 
 Requirements:
-- The question should be self-contained
-- Include specific constraints where applicable (e.g., time/space complexity requirements)
-- For coding questions, specify input/output format
-- Target {difficulty} difficulty level
+- The question should read exactly like a LeetCode problem description.
+- Include a specific, clear problem statement.
+- Explain the input and output constraints clearly.
+- Provide at least one Example with Input and Output.
+- Target a {difficulty} difficulty level.
 
-Generate ONLY the question, nothing else.
+Generate ONLY the question and its examples, nothing else.
 
 Question:"""
 
