@@ -22,6 +22,13 @@ from datetime import datetime
 
 logger = logging.getLogger(__name__)
 
+# Optional wandb integration
+try:
+    import wandb
+    HAS_WANDB = True
+except ImportError:
+    HAS_WANDB = False
+
 
 class MetricsTracker:
     """
@@ -32,13 +39,28 @@ class MetricsTracker:
       - Per-topic (aggregated by topic)
       - Per-epoch (aggregated by epoch)
       - Overall (experiment-level)
+    
+    Optionally logs to Weights & Biases (wandb) for
+    experiment dashboards and visualisation.
     """
     
-    def __init__(self):
+    def __init__(self, use_wandb: bool = False, wandb_project: str = "SEAL-DSA"):
         self.records = []
         self.topic_history = defaultdict(list)
         self.epoch_history = defaultdict(list)
         self.start_time = datetime.now()
+        
+        # Setup wandb if requested and available
+        self.use_wandb = use_wandb and HAS_WANDB
+        if self.use_wandb:
+            try:
+                wandb.init(project=wandb_project, resume="allow")
+                logger.info(f"WandB logging enabled (project: {wandb_project})")
+            except Exception as e:
+                logger.warning(f"WandB init failed: {e}. Continuing without WandB.")
+                self.use_wandb = False
+        elif use_wandb and not HAS_WANDB:
+            logger.info("WandB not installed. pip install wandb to enable.")
     
     def record(
         self,
@@ -66,6 +88,22 @@ class MetricsTracker:
         self.records.append(entry)
         self.topic_history[topic].append(entry)
         self.epoch_history[epoch].append(entry)
+        
+        # Log to wandb if enabled
+        if self.use_wandb:
+            try:
+                wandb.log({
+                    "epoch": epoch,
+                    "avg_score": avg_score,
+                    "correct_ratio": correct_ratio,
+                    "loss": loss,
+                    "grad_norm": grad_norm,
+                    "learning_rate": lr,
+                    f"topic/{topic}/score": avg_score,
+                    f"topic/{topic}/correct_ratio": correct_ratio,
+                })
+            except Exception:
+                pass  # Don't crash training for wandb issues
     
     def get_summary(self) -> Dict:
         """Get overall experiment summary."""

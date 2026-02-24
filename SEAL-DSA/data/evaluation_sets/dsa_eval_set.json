@@ -1,40 +1,479 @@
 {
-  "description": "Held-out evaluation set for SEAL-DSA. These questions should NOT be used during training.",
+  "description": "Held-out evaluation set for SEAL-DSA. These questions should NOT be used during training. Each question has test cases for verifiable code evaluation.",
+  "version": "2.0",
   "topics": {
     "arrays_strings": [
-      "Implement Kadane's algorithm for maximum subarray sum.",
-      "Given a sorted array, remove duplicates in-place and return the new length.",
-      "Find the longest substring without repeating characters."
+      {
+        "question": "Implement Kadane's algorithm for maximum subarray sum.",
+        "difficulty": "medium",
+        "type": "coding",
+        "function_name": "max_subarray_sum",
+        "test_cases": [
+          {"input": "([-2, 1, -3, 4, -1, 2, 1, -5, 4],)", "expected": 6},
+          {"input": "([1],)", "expected": 1},
+          {"input": "([-1, -2, -3],)", "expected": -1},
+          {"input": "([5, 4, -1, 7, 8],)", "expected": 23}
+        ]
+      },
+      {
+        "question": "Given a sorted array, remove duplicates in-place and return the new length.",
+        "difficulty": "easy",
+        "type": "coding",
+        "function_name": "remove_duplicates",
+        "test_cases": [
+          {"input": "([1, 1, 2],)", "expected": 2},
+          {"input": "([0, 0, 1, 1, 1, 2, 2, 3, 3, 4],)", "expected": 5},
+          {"input": "([1],)", "expected": 1}
+        ]
+      },
+      {
+        "question": "Find the longest substring without repeating characters.",
+        "difficulty": "medium",
+        "type": "coding",
+        "function_name": "length_of_longest_substring",
+        "test_cases": [
+          {"input": "('abcabcbb',)", "expected": 3},
+          {"input": "('bbbbb',)", "expected": 1},
+          {"input": "('pwwkew',)", "expected": 3},
+          {"input": "('',)", "expected": 0}
+        ]
+      },
+      {
+        "question": "Rotate an array to the right by k steps.",
+        "difficulty": "medium",
+        "type": "coding",
+        "function_name": "rotate_array",
+        "test_cases": [
+          {"input": "([1, 2, 3, 4, 5, 6, 7], 3)", "expected": [5, 6, 7, 1, 2, 3, 4]},
+          {"input": "([-1, -100, 3, 99], 2)", "expected": [3, 99, -1, -100]}
+        ]
+      },
+      {
+        "question": "Given an integer array nums, return true if any value appears at least twice.",
+        "difficulty": "easy",
+        "type": "coding",
+        "function_name": "contains_duplicate",
+        "test_cases": [
+          {"input": "([1, 2, 3, 1],)", "expected": true},
+          {"input": "([1, 2, 3, 4],)", "expected": false},
+          {"input": "([1, 1, 1, 3, 3, 4, 3, 2, 4, 2],)", "expected": true}
+        ]
+      },
+      {
+        "question": "Given two sorted arrays, find the median of the combined sorted array.",
+        "difficulty": "hard",
+        "type": "coding"
+      },
+      {
+        "question": "Explain the difference between a contiguous subarray and a subsequence with examples.",
+        "difficulty": "easy",
+        "type": "conceptual"
+      },
+      {
+        "question": "Describe the two-pointer technique and give three problems where it applies.",
+        "difficulty": "medium",
+        "type": "conceptual"
+      },
+      {
+        "question": "What is the prefix sum technique? Explain its time-space tradeoff.",
+        "difficulty": "medium",
+        "type": "analytical"
+      },
+      {
+        "question": "Write a function that determines if two strings are anagrams of each other.",
+        "difficulty": "easy",
+        "type": "coding",
+        "function_name": "is_anagram",
+        "test_cases": [
+          {"input": "('anagram', 'nagaram')", "expected": true},
+          {"input": "('rat', 'car')", "expected": false},
+          {"input": "('', '')", "expected": true}
+        ]
+      }
     ],
     "linked_lists": [
-      "Merge K sorted linked lists into one sorted list.",
-      "Remove the Nth node from the end of a linked list in one pass.",
-      "Determine if a linked list is a palindrome."
+      {
+        "question": "Merge K sorted linked lists into one sorted list.",
+        "difficulty": "hard",
+        "type": "coding"
+      },
+      {
+        "question": "Remove the Nth node from the end of a linked list in one pass.",
+        "difficulty": "medium",
+        "type": "coding"
+      },
+      {
+        "question": "Determine if a linked list is a palindrome.",
+        "difficulty": "medium",
+        "type": "coding"
+      },
+      {
+        "question": "Explain the difference between singly, doubly, and circular linked lists with use cases.",
+        "difficulty": "easy",
+        "type": "conceptual"
+      },
+      {
+        "question": "Why is insertion at the head O(1) but insertion at a specific index O(n) in a singly linked list?",
+        "difficulty": "easy",
+        "type": "analytical"
+      },
+      {
+        "question": "Write a function to detect where two singly linked lists intersect.",
+        "difficulty": "medium",
+        "type": "coding"
+      },
+      {
+        "question": "Implement an LRU Cache using a doubly linked list and hash map.",
+        "difficulty": "hard",
+        "type": "coding"
+      },
+      {
+        "question": "Explain Floyd's cycle detection algorithm and prove its correctness.",
+        "difficulty": "hard",
+        "type": "analytical"
+      },
+      {
+        "question": "Write a function to add two numbers represented as reversed linked lists.",
+        "difficulty": "medium",
+        "type": "coding"
+      },
+      {
+        "question": "What are the advantages of skip lists over balanced BSTs?",
+        "difficulty": "hard",
+        "type": "conceptual"
+      }
     ],
     "stacks_queues": [
-      "Implement a circular queue with fixed capacity.",
-      "Find the largest rectangle in a histogram using a stack.",
-      "Design a stack that supports increment operations on bottom K elements."
+      {
+        "question": "Implement a circular queue with fixed capacity.",
+        "difficulty": "medium",
+        "type": "coding"
+      },
+      {
+        "question": "Find the largest rectangle in a histogram using a stack.",
+        "difficulty": "hard",
+        "type": "coding"
+      },
+      {
+        "question": "Design a stack that supports increment operations on bottom K elements.",
+        "difficulty": "medium",
+        "type": "coding"
+      },
+      {
+        "question": "Explain the difference between LIFO and FIFO with real-world examples.",
+        "difficulty": "easy",
+        "type": "conceptual"
+      },
+      {
+        "question": "Write a function to check if parentheses in a string are balanced.",
+        "difficulty": "easy",
+        "type": "coding",
+        "function_name": "is_balanced",
+        "test_cases": [
+          {"input": "('(())',)", "expected": true},
+          {"input": "('([{}])',)", "expected": true},
+          {"input": "('(]',)", "expected": false},
+          {"input": "('',)", "expected": true},
+          {"input": "('(((',)", "expected": false}
+        ]
+      },
+      {
+        "question": "Implement a queue using two stacks. Analyze the amortized time complexity.",
+        "difficulty": "medium",
+        "type": "coding"
+      },
+      {
+        "question": "What is a monotonic stack? Explain with the Next Greater Element problem.",
+        "difficulty": "medium",
+        "type": "conceptual"
+      },
+      {
+        "question": "Implement a min-stack with O(1) push, pop, and getMin operations.",
+        "difficulty": "medium",
+        "type": "coding"
+      },
+      {
+        "question": "Design a stack that returns the maximum element in O(1) time.",
+        "difficulty": "medium",
+        "type": "coding"
+      },
+      {
+        "question": "Evaluate a postfix (Reverse Polish Notation) expression.",
+        "difficulty": "medium",
+        "type": "coding",
+        "function_name": "eval_rpn",
+        "test_cases": [
+          {"input": "(['2', '1', '+', '3', '*'],)", "expected": 9},
+          {"input": "(['4', '13', '5', '/', '+'],)", "expected": 6}
+        ]
+      }
     ],
     "trees": [
-      "Convert a sorted array to a balanced BST.",
-      "Find all root-to-leaf paths that sum to a target value.",
-      "Construct a binary tree from inorder and preorder traversals."
+      {
+        "question": "Convert a sorted array to a balanced BST.",
+        "difficulty": "easy",
+        "type": "coding"
+      },
+      {
+        "question": "Find all root-to-leaf paths that sum to a target value.",
+        "difficulty": "medium",
+        "type": "coding"
+      },
+      {
+        "question": "Construct a binary tree from inorder and preorder traversals.",
+        "difficulty": "hard",
+        "type": "coding"
+      },
+      {
+        "question": "Explain the difference between preorder, inorder, and postorder traversals.",
+        "difficulty": "easy",
+        "type": "conceptual"
+      },
+      {
+        "question": "What is the time complexity of search, insert, and delete in a balanced BST vs unbalanced?",
+        "difficulty": "medium",
+        "type": "analytical"
+      },
+      {
+        "question": "Implement level-order (BFS) traversal of a binary tree.",
+        "difficulty": "easy",
+        "type": "coding"
+      },
+      {
+        "question": "Find the diameter (longest path) of a binary tree.",
+        "difficulty": "medium",
+        "type": "coding"
+      },
+      {
+        "question": "Validate whether a given binary tree is a valid BST.",
+        "difficulty": "medium",
+        "type": "coding"
+      },
+      {
+        "question": "Explain AVL tree rotations: LL, RR, LR, and RL cases.",
+        "difficulty": "hard",
+        "type": "conceptual"
+      },
+      {
+        "question": "Serialize and deserialize a binary tree.",
+        "difficulty": "hard",
+        "type": "coding"
+      }
     ],
     "graphs": [
-      "Find the number of islands in a 2D grid.",
-      "Determine if a graph is bipartite.",
-      "Find the shortest path in a weighted graph using Bellman-Ford."
+      {
+        "question": "Find the number of islands in a 2D grid.",
+        "difficulty": "medium",
+        "type": "coding",
+        "function_name": "num_islands",
+        "test_cases": [
+          {"input": "([['1','1','0','0','0'],['1','1','0','0','0'],['0','0','1','0','0'],['0','0','0','1','1']],)", "expected": 3},
+          {"input": "([['1','1','1'],['0','1','0'],['1','1','1']],)", "expected": 1}
+        ]
+      },
+      {
+        "question": "Determine if a graph is bipartite.",
+        "difficulty": "medium",
+        "type": "coding"
+      },
+      {
+        "question": "Find the shortest path in a weighted graph using Bellman-Ford.",
+        "difficulty": "hard",
+        "type": "coding"
+      },
+      {
+        "question": "Explain the difference between BFS and DFS with time/space complexity.",
+        "difficulty": "easy",
+        "type": "conceptual"
+      },
+      {
+        "question": "When does Dijkstra's algorithm fail? How does Bellman-Ford solve this?",
+        "difficulty": "medium",
+        "type": "analytical"
+      },
+      {
+        "question": "Implement topological sort using DFS.",
+        "difficulty": "medium",
+        "type": "coding"
+      },
+      {
+        "question": "Detect a cycle in a directed graph using DFS.",
+        "difficulty": "medium",
+        "type": "coding"
+      },
+      {
+        "question": "Implement union-find (disjoint set) with path compression and union by rank.",
+        "difficulty": "medium",
+        "type": "coding"
+      },
+      {
+        "question": "Find the minimum spanning tree using Kruskal's algorithm.",
+        "difficulty": "hard",
+        "type": "coding"
+      },
+      {
+        "question": "What is an adjacency list vs adjacency matrix? Compare their tradeoffs.",
+        "difficulty": "easy",
+        "type": "conceptual"
+      }
     ],
     "sorting_searching": [
-      "Find the Kth largest element in an unsorted array.",
-      "Search for a target in a rotated sorted array.",
-      "Implement counting sort and explain when it is preferred."
+      {
+        "question": "Find the Kth largest element in an unsorted array.",
+        "difficulty": "medium",
+        "type": "coding",
+        "function_name": "find_kth_largest",
+        "test_cases": [
+          {"input": "([3, 2, 1, 5, 6, 4], 2)", "expected": 5},
+          {"input": "([3, 2, 3, 1, 2, 4, 5, 5, 6], 4)", "expected": 4}
+        ]
+      },
+      {
+        "question": "Search for a target in a rotated sorted array.",
+        "difficulty": "medium",
+        "type": "coding",
+        "function_name": "search_rotated",
+        "test_cases": [
+          {"input": "([4, 5, 6, 7, 0, 1, 2], 0)", "expected": 4},
+          {"input": "([4, 5, 6, 7, 0, 1, 2], 3)", "expected": -1},
+          {"input": "([1], 0)", "expected": -1}
+        ]
+      },
+      {
+        "question": "Implement counting sort and explain when it is preferred.",
+        "difficulty": "medium",
+        "type": "coding"
+      },
+      {
+        "question": "Prove that comparison-based sorting has a lower bound of Ω(n log n).",
+        "difficulty": "hard",
+        "type": "analytical"
+      },
+      {
+        "question": "Compare the stability, in-place property, and complexity of merge sort, quick sort, and heap sort.",
+        "difficulty": "medium",
+        "type": "conceptual"
+      },
+      {
+        "question": "Implement binary search for a target. Return -1 if not found.",
+        "difficulty": "easy",
+        "type": "coding",
+        "function_name": "binary_search",
+        "test_cases": [
+          {"input": "([1, 3, 5, 7, 9], 5)", "expected": 2},
+          {"input": "([1, 3, 5, 7, 9], 4)", "expected": -1},
+          {"input": "([2], 2)", "expected": 0},
+          {"input": "([], 1)", "expected": -1}
+        ]
+      },
+      {
+        "question": "What is the difference between lower_bound and upper_bound in binary search?",
+        "difficulty": "medium",
+        "type": "conceptual"
+      },
+      {
+        "question": "Implement merge sort and count the number of inversions in an array.",
+        "difficulty": "hard",
+        "type": "coding"
+      },
+      {
+        "question": "Explain the partition step in quicksort. What makes a good pivot?",
+        "difficulty": "medium",
+        "type": "conceptual"
+      },
+      {
+        "question": "Implement Dutch National Flag (3-way partition) for an array of 0s, 1s, and 2s.",
+        "difficulty": "medium",
+        "type": "coding",
+        "function_name": "sort_colors",
+        "test_cases": [
+          {"input": "([2, 0, 2, 1, 1, 0],)", "expected": [0, 0, 1, 1, 2, 2]},
+          {"input": "([2, 0, 1],)", "expected": [0, 1, 2]}
+        ]
+      }
     ],
     "dynamic_programming": [
-      "Find the minimum edit distance between two strings.",
-      "Solve the coin change problem: minimum coins to make a target.",
-      "Find the length of the longest increasing subsequence."
+      {
+        "question": "Find the minimum edit distance between two strings.",
+        "difficulty": "hard",
+        "type": "coding",
+        "function_name": "edit_distance",
+        "test_cases": [
+          {"input": "('horse', 'ros')", "expected": 3},
+          {"input": "('intention', 'execution')", "expected": 5},
+          {"input": "('', 'abc')", "expected": 3}
+        ]
+      },
+      {
+        "question": "Solve the coin change problem: minimum coins to make a target.",
+        "difficulty": "medium",
+        "type": "coding",
+        "function_name": "coin_change",
+        "test_cases": [
+          {"input": "([1, 5, 10, 25], 30)", "expected": 2},
+          {"input": "([2], 3)", "expected": -1},
+          {"input": "([1], 0)", "expected": 0}
+        ]
+      },
+      {
+        "question": "Find the length of the longest increasing subsequence.",
+        "difficulty": "medium",
+        "type": "coding",
+        "function_name": "length_of_lis",
+        "test_cases": [
+          {"input": "([10, 9, 2, 5, 3, 7, 101, 18],)", "expected": 4},
+          {"input": "([0, 1, 0, 3, 2, 3],)", "expected": 4},
+          {"input": "([7, 7, 7, 7, 7],)", "expected": 1}
+        ]
+      },
+      {
+        "question": "Explain the difference between memoization (top-down) and tabulation (bottom-up) with the Fibonacci example.",
+        "difficulty": "easy",
+        "type": "conceptual"
+      },
+      {
+        "question": "What are the two necessary conditions for a problem to be solvable by dynamic programming?",
+        "difficulty": "easy",
+        "type": "conceptual"
+      },
+      {
+        "question": "Solve the 0/1 knapsack problem. Define the state, transition, and base case.",
+        "difficulty": "hard",
+        "type": "coding"
+      },
+      {
+        "question": "Find the longest common subsequence of two strings.",
+        "difficulty": "medium",
+        "type": "coding",
+        "function_name": "lcs",
+        "test_cases": [
+          {"input": "('abcde', 'ace')", "expected": 3},
+          {"input": "('abc', 'def')", "expected": 0},
+          {"input": "('abc', 'abc')", "expected": 3}
+        ]
+      },
+      {
+        "question": "Implement the climbing stairs problem: how many ways to reach the Nth step taking 1 or 2 steps at a time?",
+        "difficulty": "easy",
+        "type": "coding",
+        "function_name": "climb_stairs",
+        "test_cases": [
+          {"input": "(2,)", "expected": 2},
+          {"input": "(3,)", "expected": 3},
+          {"input": "(5,)", "expected": 8},
+          {"input": "(1,)", "expected": 1}
+        ]
+      },
+      {
+        "question": "Given a rod of length N and prices for each length, find the maximum revenue from cutting the rod.",
+        "difficulty": "hard",
+        "type": "coding"
+      },
+      {
+        "question": "Can you convert any recursive DP solution to iterative? What are the tradeoffs?",
+        "difficulty": "medium",
+        "type": "analytical"
+      }
     ]
   }
 }

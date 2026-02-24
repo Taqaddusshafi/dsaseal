@@ -1,0 +1,24 @@
+# Development dependencies for SEAL-DSA
+# Install with: pip install -r requirements-dev.txt
+
+# Testing
+pytest>=7.0
+pytest-cov>=4.0
+pytest-mock>=3.10
+
+# Code quality
+black>=23.0
+isort>=5.12
+flake8>=6.0
+mypy>=1.0
+
+# Experiment tracking (optional)
+wandb>=0.15
+
+# Documentation
+sphinx>=6.0
+sphinx-rtd-theme>=1.2
+
+# Profiling
+py-spy>=0.3
+memory-profiler>=0.61

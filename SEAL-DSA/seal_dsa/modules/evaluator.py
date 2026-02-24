@@ -1,5 +1,5 @@
 """
-Evaluator Module (Rule-Based)
+Evaluator Module (Rule-Based + Code Execution)
 ================================
 Part 3 of the SEAL Loop: Self-Evaluate
 
@@ -12,14 +12,14 @@ Evaluation Dimensions:
   1. Correctness: Does the answer contain correct DSA concepts?
   2. Completeness: Are all parts of the question addressed?
   3. Complexity Analysis: Is time/space complexity mentioned?
-  4. Code Quality: Is the code syntactically correct? (for coding Qs)
+  4. Code Quality: Is the code syntactically correct + executable?
   5. Explanation Quality: Is the reasoning clear?
 
 Scoring:
   Total score ∈ [0, 1] = weighted sum of dimension scores
   
-  Score = 0.35 × Correctness + 0.25 × Completeness + 
-          0.20 × Complexity + 0.10 × Code + 0.10 × Explanation
+  Score = 0.30 × Correctness + 0.20 × Completeness + 
+          0.15 × Complexity + 0.25 × Code + 0.10 × Explanation
 
 Training Signal:
   - Score > threshold → Positive example (reinforce this behavior)
@@ -27,8 +27,9 @@ Training Signal:
 """
 
 import re
+import ast
 import logging
-from typing import List, Dict, Tuple, Optional
+from typing import List, Dict, Tuple, Optional, Any
 from dataclasses import dataclass, field
 
 from seal_dsa.config import SEALDSAConfig
@@ -49,7 +50,7 @@ class EvaluationResult:
     explanation_score: float
     feedback: str
     is_correct: bool  # Above threshold
-    details: Dict[str, any] = field(default_factory=dict)
+    details: Dict[str, Any] = field(default_factory=dict)
 
 
 # ── DSA Concept Keywords by Topic ───────────────────────────────
@@ -153,83 +154,34 @@ DSA_KEYWORDS = {
 
 class DSAEvaluator:
     """
-    Rule-based evaluator for DSA answers.
-    
-    Design Rationale:
-    ─────────────────
-    Why rule-based instead of model-based evaluation?
-    
-    1. Small models (1-4B) are unreliable self-evaluators
-    2. Rule-based evaluation is deterministic and reproducible
-    3. No additional GPU memory needed for a separate evaluator
-    4. Rubric-based scoring provides interpretable feedback
-    5. Can be validated against human judgments
-    
-    Limitation: Cannot evaluate semantic correctness deeply.
-    This is acknowledged as a project limitation.
-    
-    Architecture:
-    ┌─────────────────────────────────────────┐
-    │           DSA Evaluator                 │
-    │                                         │
-    │  (Question, Answer) Pair                │
-    │        │                                │
-    │        ├──▶ Correctness Check           │
-    │        │    (keyword matching)           │
-    │        ├──▶ Completeness Check           │
-    │        │    (coverage analysis)          │
-    │        ├──▶ Complexity Check             │
-    │        │    (O-notation detection)       │
-    │        ├──▶ Code Quality Check           │
-    │        │    (syntax validation)          │
-    │        └──▶ Explanation Check            │
-    │             (structure analysis)         │
-    │                                         │
-    │        ▼                                │
-    │  ┌──────────────┐                       │
-    │  │ Weighted      │                      │
-    │  │ Score         │ → Training Signal     │
-    │  │ Computation   │                      │
-    │  └──────────────┘                       │
-    └─────────────────────────────────────────┘
+    Rule-based evaluator for DSA answers with code execution checking.
     """
-    
-    # Dimension weights
+
+    # ✅ UPDATED WEIGHTS - code now worth 0.25 instead of 0.10
     WEIGHTS = {
-        "correctness": 0.35,
-        "completeness": 0.25,
-        "complexity": 0.20,
-        "code": 0.10,
+        "correctness": 0.30,
+        "completeness": 0.20,
+        "complexity": 0.15,
+        "code": 0.25,
         "explanation": 0.10,
     }
-    
+
     def __init__(self, config: SEALDSAConfig):
         self.config = config
         self.threshold = config.seal.correctness_threshold
         self.evaluations_done = 0
-    
+
     def evaluate(self, answer: GeneratedAnswer) -> EvaluationResult:
-        """
-        Evaluate a single generated answer.
-        
-        Args:
-            answer: GeneratedAnswer to evaluate
-            
-        Returns:
-            EvaluationResult with detailed scoring
-        """
         topic = answer.question.topic
         answer_text = answer.answer.lower()
         question_text = answer.question.question.lower()
-        
-        # ── Compute individual dimension scores ────────────────
+
         correctness = self._score_correctness(answer_text, topic)
         completeness = self._score_completeness(answer_text, question_text, topic)
         complexity = self._score_complexity(answer_text, topic)
         code = self._score_code(answer_text, answer.question.question_type)
         explanation = self._score_explanation(answer_text)
-        
-        # ── Weighted overall score ─────────────────────────────
+
         overall = (
             self.WEIGHTS["correctness"] * correctness +
             self.WEIGHTS["completeness"] * completeness +
@@ -237,14 +189,13 @@ class DSAEvaluator:
             self.WEIGHTS["code"] * code +
             self.WEIGHTS["explanation"] * explanation
         )
-        
-        # ── Generate Feedback ──────────────────────────────────
+
         feedback = self._generate_feedback(
             correctness, completeness, complexity, code, explanation
         )
-        
+
         self.evaluations_done += 1
-        
+
         return EvaluationResult(
             answer=answer,
             overall_score=overall,
@@ -256,70 +207,49 @@ class DSAEvaluator:
             feedback=feedback,
             is_correct=overall >= self.threshold,
         )
-    
+
     def evaluate_batch(
         self, answers: List[GeneratedAnswer]
     ) -> List[EvaluationResult]:
         """Evaluate a batch of answers."""
         results = [self.evaluate(ans) for ans in answers]
-        
-        # Log summary statistics
+
         scores = [r.overall_score for r in results]
         correct_count = sum(1 for r in results if r.is_correct)
-        
+
         logger.info(
             f"Evaluation: {correct_count}/{len(results)} correct, "
             f"Avg score: {sum(scores)/len(scores):.3f}"
         )
-        
+
         return results
-    
+
     def _score_correctness(self, answer: str, topic: str) -> float:
-        """
-        Score based on presence of correct DSA concepts.
-        
-        Checks:
-        - Relevant concept keywords present
-        - Known algorithms mentioned where appropriate
-        - No obviously wrong statements detected
-        """
         topic_data = DSA_KEYWORDS.get(topic, {})
         concepts = topic_data.get("concepts", [])
         algorithms = topic_data.get("algorithms", [])
-        
+
         if not concepts:
-            return 0.5  # Unknown topic, neutral score
-        
-        # Count concept matches
+            return 0.5
+
         concept_matches = sum(1 for c in concepts if c in answer)
         concept_ratio = concept_matches / max(len(concepts), 1)
-        
-        # Check for algorithm mentions
+
         algo_matches = sum(1 for a in algorithms if a in answer)
         algo_bonus = min(0.3, algo_matches * 0.1)
-        
-        # Penalize for common wrong patterns
+
         wrong_patterns = [
             "i don't know", "i'm not sure", "cannot answer",
             "this is impossible", "undefined behavior",
         ]
         penalty = sum(0.2 for p in wrong_patterns if p in answer)
-        
+
         score = min(1.0, concept_ratio * 1.5 + algo_bonus - penalty)
         return max(0.0, score)
-    
+
     def _score_completeness(
         self, answer: str, question: str, topic: str
     ) -> float:
-        """
-        Score based on how completely the question is addressed.
-        
-        Checks:
-        - Answer length relative to question complexity
-        - Key parts of the question addressed
-        - Multiple aspects covered
-        """
-        # Length heuristic (longer answers tend to be more complete)
         words = answer.split()
         if len(words) < 10:
             length_score = 0.1
@@ -331,45 +261,30 @@ class DSAEvaluator:
             length_score = 0.8
         else:
             length_score = 1.0
-        
-        # Check if answer addresses question keywords
+
         question_words = set(question.split()) - {
             'the', 'a', 'an', 'is', 'are', 'was', 'were', 'be',
             'to', 'of', 'and', 'in', 'that', 'have', 'for', 'it',
             'with', 'as', 'on', 'at', 'by', 'this', 'from',
         }
-        
+
         if question_words:
             coverage = sum(1 for w in question_words if w in answer)
             coverage_ratio = coverage / len(question_words)
         else:
             coverage_ratio = 0.5
-        
+
         return 0.5 * length_score + 0.5 * coverage_ratio
-    
+
     def _score_complexity(self, answer: str, topic: str) -> float:
-        """
-        Score based on complexity analysis presence.
-        
-        Checks:
-        - Big-O notation present
-        - Time complexity mentioned
-        - Space complexity mentioned
-        - Correct complexity for the topic
-        """
         topic_data = DSA_KEYWORDS.get(topic, {})
         expected_terms = topic_data.get("complexity_terms", [])
-        
-        # Check for Big-O notation
+
         has_big_o = bool(re.search(r'O\([^)]+\)', answer, re.IGNORECASE))
-        
-        # Check for time/space keywords
         has_time = any(t in answer for t in ["time complexity", "time:", "runtime"])
         has_space = any(t in answer for t in ["space complexity", "space:", "memory"])
-        
-        # Check for specific complexity terms
         term_matches = sum(1 for t in expected_terms if t.lower() in answer)
-        
+
         score = 0.0
         if has_big_o:
             score += 0.4
@@ -379,56 +294,221 @@ class DSAEvaluator:
             score += 0.2
         if term_matches > 0:
             score += min(0.2, term_matches * 0.1)
-        
+
         return min(1.0, score)
-    
-    def _score_code(self, answer: str, question_type: str) -> float:
+
+    # ── Safe builtins for sandboxed code execution ────────────
+    SAFE_BUILTINS = {
+        "len": len, "range": range, "int": int, "str": str,
+        "float": float, "list": list, "dict": dict, "set": set,
+        "tuple": tuple, "print": lambda *a, **kw: None,  # silence prints
+        "enumerate": enumerate, "zip": zip, "map": map, "filter": filter,
+        "min": min, "max": max, "sum": sum, "abs": abs,
+        "sorted": sorted, "reversed": reversed, "bool": bool,
+        "isinstance": isinstance, "type": type, "None": None,
+        "True": True, "False": False, "hash": hash,
+        "ord": ord, "chr": chr, "hex": hex, "bin": bin,
+        "pow": pow, "divmod": divmod, "round": round,
+        "any": any, "all": all, "iter": iter, "next": next,
+        "ValueError": ValueError, "TypeError": TypeError,
+        "IndexError": IndexError, "KeyError": KeyError,
+        "StopIteration": StopIteration, "Exception": Exception,
+    }
+
+    def _extract_code(self, answer: str) -> Optional[str]:
+        """
+        Extract Python code from an answer string.
+
+        Tries (in order):
+          1. ```python ... ``` fenced block
+          2. ``` ... ``` generic fenced block
+          3. Raw function definition (def ...)
+
+        Returns:
+            Extracted code string or None if no code found.
+        """
+        # Try to extract code from markdown block first
+        code_match = re.search(r'```python(.*?)```', answer, re.DOTALL)
+        if not code_match:
+            # Try plain markdown block
+            code_match = re.search(r'```(.*?)```', answer, re.DOTALL)
+
+        if code_match:
+            return code_match.group(1).strip()
+
+        # Try to extract raw function definition
+        code_match = re.search(r'(def\s+\w+.*)', answer, re.DOTALL)
+        if code_match:
+            return code_match.group(1).strip()
+
+        return None
+
+    # ✅ NEW METHOD - extracts and executes code to check correctness
+    def _score_code_execution(self, answer: str) -> float:
+        """
+        Actually execute the code to check if it runs without errors.
+
+        Returns:
+          1.0 - Code runs successfully
+          0.5 - Code has valid syntax but fails at runtime
+          0.0 - Code has syntax errors or no code found
+        """
+        code = self._extract_code(answer)
+        if not code:
+            return 0.0
+
+        # Step 1: Syntax check
+        try:
+            tree = ast.parse(code)
+        except SyntaxError as e:
+            logger.debug(f"Syntax error in generated code: {e}")
+            return 0.0
+
+        # Step 2: Runtime execution check (safe sandbox)
+        try:
+            safe_globals = {"__builtins__": self.SAFE_BUILTINS.copy()}
+            exec(compile(tree, '<string>', 'exec'), safe_globals)
+            logger.debug("Code executed successfully")
+            return 1.0
+        except Exception as e:
+            logger.debug(f"Runtime error in generated code: {e}")
+            return 0.5  # Syntax OK but runtime error
+
+    # ✅ NEW METHOD - run code against test cases for true correctness
+    def _score_code_with_tests(
+        self, answer: str, test_cases: List[Dict[str, Any]],
+    ) -> float:
+        """
+        Run extracted code against provided test cases.
+
+        This is the key improvement over keyword matching: we actually
+        verify that the function produces correct outputs.
+
+        Args:
+            answer: The model's answer text (may contain code blocks)
+            test_cases: List of dicts with keys:
+                - 'input': the arguments to pass (as a string expression)
+                - 'expected': the expected return value
+                - 'function': name of the function to call
+
+        Returns:
+            Score in [0, 1] = fraction of test cases passed.
+            Returns -1.0 if no code or no test cases (caller should
+            fall back to execution-only scoring).
+        """
+        if not test_cases:
+            return -1.0  # Signal: no test cases, use fallback
+
+        code = self._extract_code(answer)
+        if not code:
+            return 0.0
+
+        # Parse code
+        try:
+            tree = ast.parse(code)
+        except SyntaxError:
+            return 0.0
+
+        # Execute to define functions
+        try:
+            safe_globals = {"__builtins__": self.SAFE_BUILTINS.copy()}
+            exec(compile(tree, '<string>', 'exec'), safe_globals)
+        except Exception:
+            return 0.0
+
+        # Run test cases
+        passed = 0
+        for tc in test_cases:
+            fn_name = tc.get("function", "")
+            if fn_name not in safe_globals:
+                # Try to find any defined function
+                fn_name = self._find_function_name(code)
+                if not fn_name or fn_name not in safe_globals:
+                    continue
+
+            fn = safe_globals[fn_name]
+            try:
+                # Evaluate input expression in the safe sandbox
+                args = eval(tc["input"], {"__builtins__": self.SAFE_BUILTINS.copy()})
+                if not isinstance(args, tuple):
+                    args = (args,)
+                result = fn(*args)
+                expected = tc["expected"]
+                if result == expected:
+                    passed += 1
+                    logger.debug(f"  Test PASSED: {fn_name}({tc['input']}) == {expected}")
+                else:
+                    logger.debug(
+                        f"  Test FAILED: {fn_name}({tc['input']}) "
+                        f"returned {result}, expected {expected}"
+                    )
+            except Exception as e:
+                logger.debug(f"  Test ERROR: {fn_name}({tc['input']}): {e}")
+
+        return passed / len(test_cases)
+
+    @staticmethod
+    def _find_function_name(code: str) -> Optional[str]:
+        """Find the first function name defined in code."""
+        match = re.search(r'def\s+(\w+)', code)
+        return match.group(1) if match else None
+
+    # ✅ UPDATED _score_code - now calls _score_code_execution + test cases
+    def _score_code(
+        self, answer: str, question_type: str,
+        test_cases: Optional[List[Dict[str, Any]]] = None,
+    ) -> float:
         """
         Score code quality (for coding questions).
-        
-        Checks:
-        - Code block present (for coding questions)
-        - Python/pseudocode syntax
-        - Function definition present
-        - Return statement present
+
+        Scoring breakdown:
+        - Structural checks:   0.30 (code block, function, return, loops)
+        - Execution check:     0.30 (code runs without errors)
+        - Test case check:     0.40 (code produces correct outputs)
+
+        If no test cases are provided, execution check gets 0.50 weight
+        and structural checks get 0.50 weight (original behaviour).
         """
         if question_type not in ["coding", "problem_solving"]:
             return 0.7  # Neutral for non-coding questions
-        
-        # Check for code indicators
+
+        # ── Structural checks ─────────────────────────────────
         has_code_block = "```" in answer or "def " in answer
         has_function = "def " in answer or "function " in answer
         has_return = "return " in answer
         has_loop = any(kw in answer for kw in ["for ", "while ", "foreach"])
         has_conditional = "if " in answer
-        
-        score = 0.0
+
+        structural = 0.0
         if has_code_block:
-            score += 0.3
+            structural += 0.15
         if has_function:
-            score += 0.3
+            structural += 0.15
         if has_return:
-            score += 0.2
+            structural += 0.10
         if has_loop or has_conditional:
-            score += 0.2
-        
+            structural += 0.10
+
+        # ── Execution check ───────────────────────────────────
+        execution_score = self._score_code_execution(answer)
+
+        # ── Test-case check (if available) ────────────────────
+        test_score = self._score_code_with_tests(answer, test_cases or [])
+
+        if test_score >= 0.0:  # -1 means no test cases available
+            # Full scoring: structural 0.30 + execution 0.30 + tests 0.40
+            score = 0.30 * (structural / 0.50) + 0.30 * execution_score + 0.40 * test_score
+        else:
+            # Fallback: structural 0.50 + execution 0.50
+            score = structural + 0.50 * execution_score
+
         return min(1.0, score)
-    
+
     def _score_explanation(self, answer: str) -> float:
-        """
-        Score explanation quality.
-        
-        Checks:
-        - Structured response (numbered steps, bullet points)
-        - Transitional words
-        - Example presence
-        """
-        # Structural elements
         has_numbering = bool(re.search(r'\d+[\.\)]\s', answer))
         has_bullets = bool(re.search(r'[-•*]\s', answer))
         has_structure = has_numbering or has_bullets
-        
-        # Explanation markers
+
         explanation_words = [
             "because", "therefore", "since", "thus", "hence",
             "first", "second", "third", "step", "approach",
@@ -436,22 +516,21 @@ class DSAEvaluator:
             "for example", "consider", "let's",
         ]
         explanation_count = sum(1 for w in explanation_words if w in answer)
-        
-        # Example presence
+
         has_example = any(w in answer for w in [
             "example", "for instance", "e.g.", "consider",
             "input:", "output:", "test case",
         ])
-        
+
         score = 0.0
         if has_structure:
             score += 0.3
         score += min(0.4, explanation_count * 0.1)
         if has_example:
             score += 0.3
-        
+
         return min(1.0, score)
-    
+
     def _generate_feedback(
         self,
         correctness: float,
@@ -460,9 +539,8 @@ class DSAEvaluator:
         code: float,
         explanation: float,
     ) -> str:
-        """Generate human-readable feedback."""
         feedback_parts = []
-        
+
         if correctness < 0.5:
             feedback_parts.append("Include more relevant DSA concepts and terminology.")
         if completeness < 0.5:
@@ -470,15 +548,15 @@ class DSAEvaluator:
         if complexity < 0.5:
             feedback_parts.append("Add time and space complexity analysis with Big-O notation.")
         if code < 0.5:
-            feedback_parts.append("Include working code implementation.")
+            feedback_parts.append("Include working, executable code implementation.")
         if explanation < 0.5:
             feedback_parts.append("Improve explanation structure with steps and examples.")
-        
+
         if not feedback_parts:
             return "Good answer! All dimensions scored well."
-        
+
         return " ".join(feedback_parts)
-    
+
     def get_stats(self) -> Dict:
         """Return evaluation statistics."""
         return {

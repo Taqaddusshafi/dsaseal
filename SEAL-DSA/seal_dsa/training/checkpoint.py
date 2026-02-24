@@ -11,6 +11,7 @@ import logging
 import shutil
 from pathlib import Path
 from typing import Optional, Dict
+from datetime import datetime
 
 import torch
 from peft import PeftModel
@@ -97,7 +98,8 @@ class CheckpointManager:
             # ── Save Training State ───────────────────────────
             state = {
                 "epoch": epoch,
-                "timestamp": str(torch.cuda.Event(enable_timing=True)) if torch.cuda.is_available() else "cpu",
+                "timestamp": datetime.now().isoformat(),
+                "device": "cuda" if torch.cuda.is_available() else "cpu",
             }
             if metrics:
                 state["metrics"] = metrics

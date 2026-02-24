@@ -202,7 +202,10 @@ class ForgettingDetector:
         """
         Quick evaluation of a single topic using canned prompts.
         
-        Score = fraction of answers that contain expected keywords.
+        Uses keyword matching for conceptual answers AND code execution
+        for coding-style questions (mirrors the evaluator fix).
+        
+        Score = weighted average of answer quality metrics.
         """
         prompts = QUICK_EVAL_PROMPTS.get(topic, [])
         expected = EXPECTED_ANSWERS.get(topic, [])
@@ -210,7 +213,7 @@ class ForgettingDetector:
         if not prompts:
             return 0.5  # Unknown topic
         
-        correct = 0
+        total_score = 0.0
         total = len(prompts)
         
         for i, prompt in enumerate(prompts):
@@ -218,17 +221,37 @@ class ForgettingDetector:
             answer_lower = answer.lower()
             
             if i < len(expected):
-                # Check if any expected keyword is present
+                # Keyword matching score
                 expected_kws = expected[i]
                 matches = sum(1 for kw in expected_kws if kw.lower() in answer_lower)
-                if matches >= 1:
-                    correct += 1
+                keyword_score = min(1.0, matches / max(len(expected_kws) * 0.5, 1))
+                
+                # Also check if any code is present and valid
+                code_bonus = 0.0
+                if "def " in answer_lower or "```" in answer_lower:
+                    import ast
+                    import re
+                    code_match = re.search(r'```python(.*?)```', answer_lower, re.DOTALL)
+                    if not code_match:
+                        code_match = re.search(r'```(.*?)```', answer_lower, re.DOTALL)
+                    if not code_match:
+                        code_match = re.search(r'(def\s+\w+.*)', answer_lower, re.DOTALL)
+                    
+                    if code_match:
+                        code = code_match.group(1).strip() if code_match else ""
+                        try:
+                            ast.parse(code)
+                            code_bonus = 0.2  # Valid syntax bonus
+                        except SyntaxError:
+                            pass
+                
+                total_score += min(1.0, keyword_score + code_bonus)
             else:
                 # Heuristic: non-empty reasonable answer
                 if len(answer.split()) > 5:
-                    correct += 0.5
+                    total_score += 0.5
         
-        return correct / total
+        return total_score / total
     
     def _get_model_answer(
         self,

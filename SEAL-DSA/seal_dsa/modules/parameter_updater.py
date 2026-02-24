@@ -42,7 +42,10 @@ from dataclasses import dataclass
 import torch
 import torch.nn as nn
 from torch.optim import AdamW
-from torch.optim.lr_scheduler import CosineAnnealingLR, LinearLR
+from torch.optim.lr_scheduler import (
+    CosineAnnealingLR, LinearLR, SequentialLR,
+)
+from torch.cuda.amp import autocast, GradScaler
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
 from seal_dsa.config import SEALDSAConfig
@@ -128,32 +131,58 @@ class ParameterUpdater:
             eps=1e-8,
         )
         
-        # ── Setup LR Scheduler ─────────────────────────────────
+        # ── Setup LR Scheduler (with warmup) ───────────────────
         total_steps = (
             config.seal.num_epochs * 
             config.seal.questions_per_topic * 
             8  # approximate number of topics
         ) // (config.seal.batch_size * config.seal.gradient_accumulation_steps)
+        total_steps = max(total_steps, 1)
+        warmup_steps = min(config.seal.warmup_steps, total_steps // 2)
+        decay_steps = max(total_steps - warmup_steps, 1)
         
+        # Phase 1: Linear warmup from 10% → 100% of lr
+        warmup_scheduler = LinearLR(
+            self.optimizer,
+            start_factor=0.1,
+            end_factor=1.0,
+            total_iters=max(warmup_steps, 1),
+        )
+        
+        # Phase 2: Cosine or linear decay
         if config.seal.scheduler == "cosine":
-            self.scheduler = CosineAnnealingLR(
+            decay_scheduler = CosineAnnealingLR(
                 self.optimizer,
-                T_max=max(total_steps, 1),
+                T_max=decay_steps,
                 eta_min=1e-6,
             )
         else:
-            self.scheduler = LinearLR(
+            decay_scheduler = LinearLR(
                 self.optimizer,
                 start_factor=1.0,
                 end_factor=0.1,
-                total_iters=max(total_steps, 1),
+                total_iters=decay_steps,
             )
+        
+        if warmup_steps > 0:
+            self.scheduler = SequentialLR(
+                self.optimizer,
+                schedulers=[warmup_scheduler, decay_scheduler],
+                milestones=[warmup_steps],
+            )
+        else:
+            self.scheduler = decay_scheduler
+        
+        # ── Setup Mixed-Precision (AMP) ────────────────────────
+        self.use_amp = config.mixed_precision and torch.cuda.is_available()
+        self.scaler = GradScaler(enabled=self.use_amp)
         
         self.total_updates = 0
         self.total_loss = 0.0
         
         logger.info(f"Optimizer: AdamW (lr={config.seal.learning_rate})")
-        logger.info(f"Scheduler: {config.seal.scheduler}")
+        logger.info(f"Scheduler: {config.seal.scheduler} (warmup={warmup_steps} steps)")
+        logger.info(f"Mixed precision (AMP): {self.use_amp}")
         logger.info(f"Trainable params: {sum(p.numel() for p in trainable_params):,}")
     
     def update(
@@ -206,41 +235,48 @@ class ParameterUpdater:
         for i in range(0, len(training_pairs), self.config.seal.batch_size):
             batch = training_pairs[i:i + self.config.seal.batch_size]
             
-            # Tokenize batch
-            batch_loss = self._compute_batch_loss(batch)
+            # Forward pass with optional mixed-precision
+            with autocast(enabled=self.use_amp):
+                batch_loss = self._compute_batch_loss(batch)
+                
+                # Add EWC regularization if enabled
+                if ewc_loss_fn is not None:
+                    ewc_loss = ewc_loss_fn(self.model)
+                    batch_loss = batch_loss + ewc_loss
+                    total_ewc_loss += ewc_loss.item()
+                
+                # Scale loss for gradient accumulation
+                scaled_loss = batch_loss / self.config.seal.gradient_accumulation_steps
             
-            # Add EWC regularization if enabled
-            if ewc_loss_fn is not None:
-                ewc_loss = ewc_loss_fn(self.model)
-                batch_loss = batch_loss + ewc_loss
-                total_ewc_loss += ewc_loss.item()
-            
-            # Scale loss for gradient accumulation
-            scaled_loss = batch_loss / self.config.seal.gradient_accumulation_steps
-            scaled_loss.backward()
+            # Backward pass with gradient scaler
+            self.scaler.scale(scaled_loss).backward()
             
             total_loss += batch_loss.item()
             num_batches += 1
             
             # Step optimizer after accumulation
             if num_batches % self.config.seal.gradient_accumulation_steps == 0:
-                # Gradient clipping
+                # Unscale before clipping
+                self.scaler.unscale_(self.optimizer)
                 grad_norm = torch.nn.utils.clip_grad_norm_(
                     [p for p in self.model.parameters() if p.requires_grad],
                     self.config.seal.max_grad_norm,
                 )
                 
-                self.optimizer.step()
+                self.scaler.step(self.optimizer)
+                self.scaler.update()
                 self.scheduler.step()
                 self.optimizer.zero_grad()
         
         # Handle remaining gradients
         if num_batches % self.config.seal.gradient_accumulation_steps != 0:
+            self.scaler.unscale_(self.optimizer)
             grad_norm = torch.nn.utils.clip_grad_norm_(
                 [p for p in self.model.parameters() if p.requires_grad],
                 self.config.seal.max_grad_norm,
             )
-            self.optimizer.step()
+            self.scaler.step(self.optimizer)
+            self.scaler.update()
             self.scheduler.step()
             self.optimizer.zero_grad()
         

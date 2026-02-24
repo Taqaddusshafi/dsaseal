@@ -76,6 +76,21 @@ Think through this problem:
 Solution:"""
 
 
+REFINEMENT_PROMPT = """You previously answered this DSA question, but your answer had issues.
+
+Question: {question}
+
+Previous attempt issues: {feedback}
+
+Please provide an improved answer that addresses these issues. Include:
+1. Corrected approach / algorithm
+2. Time and space complexity analysis
+3. Working Python code implementation
+4. Edge case handling
+
+Improved Solution:"""
+
+
 class AnswerGenerator:
     """
     Generates answers to DSA questions using the language model.
@@ -232,28 +247,123 @@ class AnswerGenerator:
         inputs: dict,
     ) -> float:
         """
-        Estimate model confidence from generation.
+        Estimate model confidence from generation log-probabilities.
         
-        Uses average token probability as a proxy for confidence.
-        This is a simplified heuristic — more sophisticated methods
-        could use entropy or calibrated probabilities.
+        Computes the average token probability across the generated
+        sequence using a forward pass. Higher average probability
+        indicates the model is more "certain" about its answer.
         
-        Note: This is approximate since we use greedy/sampling decoding.
+        Returns:
+            float in [0, 1] — mean token probability.
         """
-        # For efficiency, return a heuristic confidence
-        # Full implementation would compute log-probabilities
-        generated_length = outputs.shape[1] - inputs['input_ids'].shape[1]
+        try:
+            generated_ids = outputs[0]  # full sequence including prompt
+            input_len = inputs['input_ids'].shape[1]
+            gen_len = generated_ids.shape[0] - input_len
+            
+            if gen_len <= 0:
+                return 0.1
+            
+            # Forward pass to get logits
+            with torch.no_grad():
+                model_out = self.model(generated_ids.unsqueeze(0))
+                logits = model_out.logits  # (1, seq_len, vocab_size)
+            
+            # Only look at generated token positions
+            # Shift: logit at position t predicts token at position t+1
+            gen_logits = logits[0, input_len - 1:-1, :]  # (gen_len, vocab)
+            gen_tokens = generated_ids[input_len:]         # (gen_len,)
+            
+            # Compute per-token probability
+            probs = torch.softmax(gen_logits, dim=-1)
+            token_probs = probs.gather(
+                -1, gen_tokens.unsqueeze(-1)
+            ).squeeze(-1)  # (gen_len,)
+            
+            # Mean probability as confidence
+            confidence = token_probs.mean().item()
+            return max(0.0, min(1.0, confidence))
+            
+        except Exception as e:
+            logger.debug(f"Confidence estimation failed: {e}")
+            # Fallback: length-based heuristic
+            generated_length = outputs.shape[1] - inputs['input_ids'].shape[1]
+            if generated_length > 200:
+                return 0.7
+            elif generated_length > 100:
+                return 0.5
+            elif generated_length > 50:
+                return 0.3
+            else:
+                return 0.2
+    
+    @torch.no_grad()
+    def generate_refined_answer(
+        self,
+        question: GeneratedQuestion,
+        previous_answer: str,
+        feedback: str,
+    ) -> GeneratedAnswer:
+        """
+        Generate a refined answer using feedback from the evaluator.
         
-        # Longer, more detailed answers tend to indicate higher confidence
-        # This is a rough heuristic
-        if generated_length > 200:
-            return 0.7
-        elif generated_length > 100:
-            return 0.5
-        elif generated_length > 50:
-            return 0.3
-        else:
-            return 0.2
+        This implements the self-refinement step: when an answer scores
+        poorly, the model is given its own feedback and asked to improve.
+        
+        Args:
+            question: The original question
+            previous_answer: The model's initial (poor) attempt
+            feedback: Evaluator feedback on what was wrong
+            
+        Returns:
+            A new GeneratedAnswer with the refined response.
+        """
+        prompt = REFINEMENT_PROMPT.format(
+            question=question.question,
+            feedback=feedback,
+        )
+        
+        try:
+            inputs = self.tokenizer(
+                prompt,
+                return_tensors="pt",
+                truncation=True,
+                max_length=self.config.model.max_length,
+            ).to(self.model.device)
+            
+            outputs = self.model.generate(
+                **inputs,
+                max_new_tokens=512,
+                temperature=0.4,  # Slightly higher than normal for creativity
+                top_p=0.9,
+                do_sample=True,
+                pad_token_id=self.tokenizer.pad_token_id,
+                repetition_penalty=1.15,  # Stronger to avoid repeating mistakes
+            )
+            
+            generated_ids = outputs[0][inputs['input_ids'].shape[1]:]
+            answer_text = self.tokenizer.decode(
+                generated_ids, skip_special_tokens=True
+            ).strip()
+            
+            confidence = self._estimate_confidence(outputs, inputs)
+            self.answers_generated += 1
+            
+            return GeneratedAnswer(
+                question=question,
+                answer=answer_text,
+                confidence=confidence,
+                generation_tokens=len(generated_ids),
+            )
+            
+        except Exception as e:
+            logger.error(f"Refinement generation failed: {e}")
+            return GeneratedAnswer(
+                question=question,
+                answer=previous_answer,  # Keep original if refinement fails
+                confidence=0.0,
+                generation_tokens=0,
+            )
     
     def get_training_pairs(
         self,

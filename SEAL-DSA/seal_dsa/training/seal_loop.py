@@ -265,6 +265,40 @@ class SEALTrainingLoop:
         logger.info(f"  Avg score: {avg_score:.3f}, "
                      f"Correct: {correct_count}/{len(evaluations)}")
         
+        # ── Step 3.5: Self-Refinement (for low-scoring answers) ──
+        refined_count = 0
+        refinement_threshold = self.config.seal.quality_threshold
+        
+        for i, eval_result in enumerate(evaluations):
+            if eval_result.overall_score < refinement_threshold:
+                # Re-generate with evaluator feedback
+                refined_answer = self.answer_gen.generate_refined_answer(
+                    question=eval_result.answer.question,
+                    previous_answer=eval_result.answer.answer,
+                    feedback=eval_result.feedback,
+                )
+                # Re-evaluate the refined answer
+                refined_eval = self.evaluator.evaluate(refined_answer)
+                
+                # Keep the better version
+                if refined_eval.overall_score > eval_result.overall_score:
+                    evaluations[i] = refined_eval
+                    refined_count += 1
+                    logger.debug(
+                        f"  Refined answer improved: "
+                        f"{eval_result.overall_score:.3f} → "
+                        f"{refined_eval.overall_score:.3f}"
+                    )
+        
+        if refined_count > 0:
+            scores = [e.overall_score for e in evaluations]
+            correct_count = sum(1 for e in evaluations if e.is_correct)
+            avg_score = sum(scores) / len(scores) if scores else 0.0
+            logger.info(
+                f"  After refinement: {refined_count} answers improved, "
+                f"new avg score: {avg_score:.3f}"
+            )
+        
         # ── Step 4: Update Parameters ──────────────────────────
         logger.info(f"  Step 4: Updating parameters...")
         ewc_loss_fn = self.ewc.compute_loss if self.ewc else None
@@ -279,6 +313,7 @@ class SEALTrainingLoop:
         result["loss"] = update_result.loss
         result["num_questions"] = len(questions)
         result["num_correct"] = correct_count
+        result["num_refined"] = refined_count
         
         self.metrics.record(
             epoch=epoch,
