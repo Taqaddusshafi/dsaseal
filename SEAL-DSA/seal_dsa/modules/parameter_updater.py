@@ -10,12 +10,23 @@ base model frozen.
 Mathematical Foundation:
 ========================
 
-Loss Function:
-  L_total = L_task + λ_ewc · L_ewc
+Loss Function (Novel: Hybrid CE + DPO):
+  L_total = L_CE + λ_dpo · L_DPO + λ_ewc · L_EWC
 
   where:
-    L_task = CrossEntropy(model(question), correct_answer)
-    L_ewc = (λ/2) Σᵢ Fᵢ(θᵢ - θ*ᵢ)²  (if EWC enabled)
+    L_CE  = CrossEntropy(model(question), correct_answer)
+    L_DPO = -log σ(β · (log π(y_w|x) - log π(y_l|x)))  [DPO loss]
+    L_EWC = (λ/2) Σᵢ Fᵢ(θᵢ - θ*ᵢ)²  (if EWC enabled)
+
+Direct Preference Optimization (DPO):
+  Given a question x, chosen answer y_w, rejected answer y_l:
+  L_DPO = -log σ(β · (log π_θ(y_w|x) - log π_θ(y_l|x)))
+
+  This is equivalent to RLHF but without a separate reward model.
+  The evaluator's scores define the preference ordering.
+
+  Reference: Rafailov et al. (2023) "Direct Preference Optimization:
+  Your Language Model is Secretly a Reward Model"
 
 Parameter Update:
   For LoRA matrices B ∈ ℝ^{d×r} and A ∈ ℝ^{r×k}:
@@ -27,12 +38,6 @@ Parameter Update:
   ΔW_{t+1} = (α/r) · B_{t+1} · A_{t+1}
 
   where η is the learning rate and α/r is the LoRA scaling.
-
-Key Properties:
-  1. Only r × (d + k) parameters updated per module (vs d × k for full)
-  2. Base weights W₀ remain frozen (no catastrophic forgetting of general knowledge)
-  3. Updates are additive: W_effective = W₀ + ΔW
-  4. Can be merged back into W₀ for inference (no latency overhead)
 """
 
 import logging
@@ -62,6 +67,7 @@ class UpdateResult:
     learning_rate: float
     num_samples: int
     ewc_loss: float = 0.0
+    dpo_loss: float = 0.0  # Novel: tracks DPO contribution
 
 
 class ParameterUpdater:
@@ -404,6 +410,134 @@ class ParameterUpdater:
             total_loss = total_loss + weighted_loss
         
         return total_loss / len(batch)
+    
+    # ==================================================================
+    #  NOVEL CONTRIBUTION: Contrastive Self-Play with DPO Loss
+    # ==================================================================
+    
+    def _compute_log_probs(
+        self,
+        question: str,
+        answer: str,
+    ) -> torch.Tensor:
+        """
+        Compute log P(answer | question) for DPO.
+        
+        Returns the average per-token log probability of the answer
+        conditioned on the question.
+        """
+        full_text = question + " " + answer
+        
+        encodings = self.tokenizer(
+            full_text,
+            return_tensors="pt",
+            truncation=True,
+            max_length=self.config.model.max_length,
+            padding=True,
+        ).to(self.model.device)
+        
+        input_len = len(self.tokenizer.encode(
+            question, add_special_tokens=False
+        ))
+        
+        labels = encodings["input_ids"].clone()
+        labels[0, :input_len] = -100
+        
+        outputs = self.model(
+            input_ids=encodings["input_ids"],
+            attention_mask=encodings["attention_mask"],
+            labels=labels,
+        )
+        
+        # outputs.loss is the average negative log-likelihood
+        # We want log prob, so negate
+        return -outputs.loss
+    
+    def compute_dpo_loss(
+        self,
+        evaluation_results: List[EvaluationResult],
+        beta: float = 0.1,
+    ) -> torch.Tensor:
+        """
+        Compute Direct Preference Optimization (DPO) loss.
+        
+        Novel Contribution:
+        ====================
+        SEAL generates multiple answers for the same question via the
+        self-play loop. We rank these by evaluator score and create
+        preference pairs (y_chosen, y_rejected) for contrastive training.
+        
+        DPO Loss (Rafailov et al., 2023):
+          L_DPO = -log σ(β · (Δ_θ - Δ_ref))
+        
+        Where:
+          Δ_θ   = log π_θ(y_w|x) - log π_θ(y_l|x)
+          Δ_ref = log π_ref(y_w|x) - log π_ref(y_l|x)
+        
+        In self-play mode, π_ref is the the model at the start of
+        the current update step (before gradient computation).
+        We approximate Δ_ref ≈ 0 for the first iteration (no ref model)
+        which reduces DPO to a simpler ranking loss.
+        
+        Args:
+            evaluation_results: List of evaluation results (same question
+                may appear multiple times with different answers)
+            beta: Temperature controlling preference sharpness.
+                  Higher β = more aggressive preference learning.
+        
+        Returns:
+            Scalar DPO loss tensor.
+        """
+        # Group results by question
+        from collections import defaultdict
+        question_groups: Dict[str, List[EvaluationResult]] = defaultdict(list)
+        
+        for result in evaluation_results:
+            q_key = result.answer.question.question[:100]  # Use first 100 chars as key
+            question_groups[q_key].append(result)
+        
+        dpo_loss = torch.tensor(0.0, device=self.model.device)
+        num_pairs = 0
+        
+        for q_key, results in question_groups.items():
+            if len(results) < 2:
+                continue
+            
+            # Sort by score: best first
+            results.sort(key=lambda r: r.overall_score, reverse=True)
+            
+            # Create preference pairs: best vs worst
+            chosen = results[0]
+            rejected = results[-1]
+            
+            # Skip if scores are too similar (no clear preference)
+            if chosen.overall_score - rejected.overall_score < 0.1:
+                continue
+            
+            question_text = self._format_training_input(
+                chosen.answer.question.question
+            )
+            
+            # Compute log probs for chosen and rejected
+            log_prob_chosen = self._compute_log_probs(
+                question_text, chosen.answer.answer
+            )
+            log_prob_rejected = self._compute_log_probs(
+                question_text, rejected.answer.answer
+            )
+            
+            # DPO loss: -log sigmoid(beta * (log_prob_chosen - log_prob_rejected))
+            preference_diff = beta * (log_prob_chosen - log_prob_rejected)
+            pair_loss = -torch.nn.functional.logsigmoid(preference_diff)
+            
+            dpo_loss = dpo_loss + pair_loss
+            num_pairs += 1
+        
+        if num_pairs > 0:
+            dpo_loss = dpo_loss / num_pairs
+            logger.info(f"DPO loss computed from {num_pairs} preference pairs")
+        
+        return dpo_loss
     
     def get_stats(self) -> Dict:
         """Return update statistics."""

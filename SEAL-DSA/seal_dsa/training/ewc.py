@@ -62,6 +62,18 @@ class EWC:
     3. During subsequent training, add EWC penalty to the loss
     4. Fisher is computed using only LoRA parameters (memory efficient)
     
+    Novel: Dynamic Lambda (Adaptive Regularisation Strength)
+    =========================================================
+    Instead of a fixed λ, SEAL dynamically adjusts λ based on
+    real-time forgetting detector signals:
+    
+      λ^{t+1} = clip(λ^{t} + η_λ · (forgetting_rate - target_rate), λ_min, λ_max)
+    
+    When forgetting_rate > target_rate: λ increases (more protection)
+    When forgetting_rate < target_rate: λ decreases (faster learning)
+    
+    This eliminates the need for expensive λ hyperparameter tuning.
+    
     Memory Cost:
     ──────────────
     Stores 2× the LoRA parameters:
@@ -87,8 +99,78 @@ class EWC:
         self.initialized = False
         self.update_count = 0
         
-        logger.info(f"EWC initialized: λ={self.lambda_}, "
-                     f"fisher_samples={self.fisher_sample_size}")
+        # ── Dynamic Lambda State (Novel) ──────────────────────
+        self.lambda_min = 0.05
+        self.lambda_max = 2.0
+        self.lambda_lr = 0.1          # Learning rate for lambda adjustment
+        self.target_forgetting = 0.05  # Target forgetting rate
+        self._lambda_history: List[float] = [self.lambda_]
+        
+        logger.info(f"EWC initialized: λ={self.lambda_} (dynamic, "
+                     f"range=[{self.lambda_min}, {self.lambda_max}]), "
+                     f"fisher_samples={config.fisher_sample_size}")
+    
+    def adapt_lambda(self, forgetting_report: Dict) -> float:
+        """
+        Dynamically adjust λ based on forgetting detector signals.
+        
+        Novel Contribution:
+        ====================
+        Traditional EWC uses a fixed λ that must be manually tuned.
+        SEAL's dynamic λ uses a simple control loop:
+        
+          λ^{t+1} = clip(λ^{t} + η_λ · (f_rate - f_target), λ_min, λ_max)
+        
+        where:
+          f_rate   = current forgetting rate (from detector)
+          f_target = desired maximum forgetting rate
+          η_λ      = lambda learning rate
+        
+        Intuition:
+          - If forgetting_rate > target: λ increases → stronger regularisation
+          - If forgetting_rate < target: λ decreases → more plasticity
+        
+        This creates a self-regulating system that balances stability
+        and plasticity automatically.
+        
+        Args:
+            forgetting_report: Dict from ForgettingDetector.check_all_topics()
+                Expected keys: 'avg_forgetting', 'topics_at_risk'
+        
+        Returns:
+            Updated lambda value.
+        """
+        current_forgetting = forgetting_report.get("avg_forgetting", 0.0)
+        topics_at_risk = len(forgetting_report.get("topics_at_risk", []))
+        
+        # Compute forgetting signal (combine average forgetting + risk count)
+        total_topics = max(forgetting_report.get("total_topics", 1), 1)
+        risk_rate = topics_at_risk / total_topics
+        forgetting_signal = 0.7 * current_forgetting + 0.3 * risk_rate
+        
+        # Control loop: adjust lambda
+        error = forgetting_signal - self.target_forgetting
+        old_lambda = self.lambda_
+        self.lambda_ = max(
+            self.lambda_min,
+            min(self.lambda_max, self.lambda_ + self.lambda_lr * error)
+        )
+        
+        self._lambda_history.append(self.lambda_)
+        
+        if abs(self.lambda_ - old_lambda) > 0.001:
+            logger.info(
+                f"Dynamic EWC: λ {old_lambda:.4f} → {self.lambda_:.4f} "
+                f"(forgetting={forgetting_signal:.4f}, "
+                f"target={self.target_forgetting:.4f}, "
+                f"topics_at_risk={topics_at_risk})"
+            )
+        
+        return self.lambda_
+    
+    def get_lambda_history(self) -> List[float]:
+        """Return the history of lambda values for analysis."""
+        return self._lambda_history
     
     def update_fisher(
         self,

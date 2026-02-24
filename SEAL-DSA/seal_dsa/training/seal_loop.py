@@ -192,6 +192,11 @@ class SEALTrainingLoop:
                     f"on topic '{forgetting_report['worst_topic']}'"
                 )
             
+            # ── Dynamic EWC Lambda Adaptation (Novel) ──────────
+            if self.ewc is not None:
+                new_lambda = self.ewc.adapt_lambda(forgetting_report)
+                logger.info(f"EWC λ = {new_lambda:.4f}")
+            
             # ── Save Checkpoint ────────────────────────────────
             if (epoch + 1) % self.config.checkpoint.save_every_n_epochs == 0:
                 self.checkpoint_mgr.save(

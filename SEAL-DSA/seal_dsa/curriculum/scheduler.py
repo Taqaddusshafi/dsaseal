@@ -126,12 +126,69 @@ class CurriculumScheduler:
         
         return topics
     
+    # ==================================================================
+    #  NOVEL CONTRIBUTION: IRT-Based Competence Estimation
+    # ==================================================================
+    
+    def _estimate_competence(self, topic: str) -> float:
+        """
+        Estimate model competence (ability θ) for a topic using
+        Item Response Theory (IRT).
+        
+        Novel Contribution:
+        ====================
+        We apply the 1-Parameter Logistic (1PL) IRT model from
+        psychometrics to estimate how "able" the model is on a topic:
+        
+          P(correct | θ, b) = 1 / (1 + exp(-(θ - b)))
+        
+        where:
+          θ = model ability (what we estimate)
+          b = question difficulty (from curriculum)
+        
+        Given observed scores, we estimate θ using maximum likelihood:
+          θ_MLE = log(p / (1-p)) + avg_difficulty
+        
+        where p is the average score (clipped to avoid log(0)).
+        
+        Reference: Lord & Novick (1968) "Statistical Theories of
+        Mental Test Scores"
+        
+        Returns:
+            Estimated ability θ ∈ (-∞, +∞), higher = more competent.
+            Returns 0.0 for unknown topics.
+        """
+        import math
+        
+        scores = self.topic_scores.get(topic, [])
+        if not scores:
+            return 0.0
+        
+        # Average probability of "correct" answer
+        p = sum(scores) / len(scores)
+        p = max(0.01, min(0.99, p))  # Clip to avoid log(0)
+        
+        # Map topic to difficulty level (from curriculum ordering)
+        all_topics = get_topic_names()
+        topic_idx = all_topics.index(topic) if topic in all_topics else 0
+        # Difficulty increases with topic index (normalised to [-2, 2])
+        difficulty = -2.0 + 4.0 * (topic_idx / max(len(all_topics) - 1, 1))
+        
+        # MLE estimate of ability
+        theta = math.log(p / (1 - p)) + difficulty
+        
+        return theta
+    
     def _adaptive_schedule(self, epoch: int) -> List[str]:
         """
-        Adaptive curriculum: focus on weakest topics.
+        Adaptive curriculum: focus on topics at the competence frontier.
         
-        After the first epoch, sort topics by performance (ascending)
-        and focus training on the lowest-performing topics.
+        Uses IRT competence scores (Novel) to identify the optimal
+        "Zone of Proximal Development" — topics where the model
+        has enough foundation to learn but hasn't mastered yet.
+        
+        The ZPD corresponds to topics with competence θ in the
+        range [-1, 1], meaning ~27% to ~73% success probability.
         """
         all_topics = get_topic_names()
         
@@ -139,24 +196,33 @@ class CurriculumScheduler:
             # First epoch: start with fundamentals
             return all_topics[:3]
         
-        # Sort topics by average score (ascending = weakest first)
-        scored_topics = []
+        # Compute IRT competence for each topic
+        competence = {}
         for topic in all_topics:
-            scores = self.topic_scores.get(topic, [])
-            avg = sum(scores) / len(scores) if scores else 0.0
-            scored_topics.append((topic, avg))
+            competence[topic] = self._estimate_competence(topic)
         
-        scored_topics.sort(key=lambda x: x[1])
+        # Sort by competence (ascending = least competent first)
+        sorted_topics = sorted(all_topics, key=lambda t: competence.get(t, 0.0))
         
-        # Focus on bottom half + always include newest topic
-        n = max(3, len(scored_topics) // 2)
-        focus_topics = [t[0] for t in scored_topics[:n]]
+        # Zone of Proximal Development: prioritise topics with θ between -1 and 1
+        zpd_topics = [t for t in sorted_topics if -1.0 <= competence.get(t, 0.0) <= 1.0]
+        weak_topics = [t for t in sorted_topics if competence.get(t, 0.0) < -1.0]
+        
+        # Combine: ZPD topics first, then weakest, then rest
+        focus_topics = zpd_topics + weak_topics
+        n = max(3, len(all_topics) // 2)
+        focus_topics = focus_topics[:n]
         
         # Ensure the "next" topic in curriculum is included
         next_topic_idx = min(epoch, len(all_topics) - 1)
         next_topic = all_topics[next_topic_idx]
         if next_topic not in focus_topics:
             focus_topics.append(next_topic)
+        
+        logger.info(
+            f"IRT competence: " +
+            ", ".join(f"{t}={competence.get(t, 0):.2f}" for t in all_topics)
+        )
         
         return focus_topics
     

@@ -155,10 +155,27 @@ DSA_KEYWORDS = {
 class DSAEvaluator:
     """
     Rule-based evaluator for DSA answers with code execution checking.
+    
+    Novel: Adaptive Evaluation Weights
+    ===================================
+    Unlike fixed-weight evaluators, SEAL uses adaptive dimension weights
+    that shift emphasis toward dimensions where the model is weakest.
+    
+    This creates a co-evolving evaluation function where the model and
+    evaluator form a tight feedback loop:
+      - Model improves → evaluation shifts focus to remaining weaknesses
+      - Prevents the model from "gaming" the evaluator by only optimising
+        easy dimensions while ignoring hard ones
+    
+    Mathematical formulation:
+      w_d^{t+1} = α · w_d^{t} + (1-α) · softmax(-s_d^{t})
+    
+    where s_d^{t} is the avg score on dimension d at time t,
+    and α is the EMA smoothing factor (default 0.9).
     """
 
-    # ✅ UPDATED WEIGHTS - code now worth 0.25 instead of 0.10
-    WEIGHTS = {
+    # Base weights (used as initialisation and fallback)
+    BASE_WEIGHTS = {
         "correctness": 0.30,
         "completeness": 0.20,
         "complexity": 0.15,
@@ -170,6 +187,17 @@ class DSAEvaluator:
         self.config = config
         self.threshold = config.seal.correctness_threshold
         self.evaluations_done = 0
+        
+        # ── Adaptive Weights State ─────────────────────────────
+        # Current weights (will evolve during training)
+        self.WEIGHTS = dict(self.BASE_WEIGHTS)
+        
+        # Running averages per dimension (for adaptive weight computation)
+        self._dimension_scores: Dict[str, List[float]] = {
+            d: [] for d in self.BASE_WEIGHTS
+        }
+        self._weight_ema_alpha = 0.9  # Smoothing factor
+        self._adapt_every_n = 20      # Re-compute weights every N evals
 
     def evaluate(self, answer: GeneratedAnswer) -> EvaluationResult:
         topic = answer.question.topic
@@ -182,6 +210,7 @@ class DSAEvaluator:
         code = self._score_code(answer_text, answer.question.question_type)
         explanation = self._score_explanation(answer_text)
 
+        # Use adaptive weights
         overall = (
             self.WEIGHTS["correctness"] * correctness +
             self.WEIGHTS["completeness"] * completeness +
@@ -196,6 +225,17 @@ class DSAEvaluator:
 
         self.evaluations_done += 1
 
+        # Track per-dimension scores for adaptive weight computation
+        self._dimension_scores["correctness"].append(correctness)
+        self._dimension_scores["completeness"].append(completeness)
+        self._dimension_scores["complexity"].append(complexity)
+        self._dimension_scores["code"].append(code)
+        self._dimension_scores["explanation"].append(explanation)
+
+        # Periodically adapt weights
+        if self.evaluations_done % self._adapt_every_n == 0:
+            self._adapt_weights()
+
         return EvaluationResult(
             answer=answer,
             overall_score=overall,
@@ -206,6 +246,58 @@ class DSAEvaluator:
             explanation_score=explanation,
             feedback=feedback,
             is_correct=overall >= self.threshold,
+            details={"weights": dict(self.WEIGHTS)},
+        )
+
+    def _adapt_weights(self):
+        """
+        Adapt evaluation weights based on model's weakness profile.
+        
+        Algorithm (Novel Contribution):
+        ================================
+        1. Compute average score per dimension over recent evaluations
+        2. Apply inverse-softmax: dimensions with LOWER avg scores
+           receive HIGHER weights (focusing training on weaknesses)
+        3. Smooth with EMA to prevent oscillation
+        4. Normalise so weights sum to 1.0
+        
+        This implements Equation (3) from the SEAL paper:
+          w_d^{t+1} = α · w_d^{t} + (1-α) · softmax(-s_d / τ)
+        
+        where τ=0.5 is a temperature controlling sharpness.
+        """
+        import math
+        
+        # Use recent scores (last 50 evaluations)
+        window = 50
+        avg_scores = {}
+        for dim, scores in self._dimension_scores.items():
+            recent = scores[-window:] if scores else [0.5]
+            avg_scores[dim] = sum(recent) / len(recent)
+        
+        # Inverse-softmax with temperature
+        temperature = 0.5
+        neg_scores = {d: -s / temperature for d, s in avg_scores.items()}
+        max_neg = max(neg_scores.values())  # For numerical stability
+        exp_scores = {d: math.exp(s - max_neg) for d, s in neg_scores.items()}
+        total_exp = sum(exp_scores.values())
+        target_weights = {d: v / total_exp for d, v in exp_scores.items()}
+        
+        # EMA smoothing: blend with current weights
+        alpha = self._weight_ema_alpha
+        for dim in self.WEIGHTS:
+            self.WEIGHTS[dim] = (
+                alpha * self.WEIGHTS[dim] + 
+                (1 - alpha) * target_weights[dim]
+            )
+        
+        # Normalise to sum to 1.0
+        total = sum(self.WEIGHTS.values())
+        self.WEIGHTS = {d: w / total for d, w in self.WEIGHTS.items()}
+        
+        logger.debug(
+            f"Adapted weights: " +
+            ", ".join(f"{d}={w:.3f}" for d, w in self.WEIGHTS.items())
         )
 
     def evaluate_batch(
