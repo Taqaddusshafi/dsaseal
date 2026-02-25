@@ -39,7 +39,7 @@ Reference:
 """
 
 import logging
-from typing import Dict, Optional
+from typing import Dict, List, Optional
 from copy import deepcopy
 
 import torch
