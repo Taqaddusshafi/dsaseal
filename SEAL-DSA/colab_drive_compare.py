@@ -190,15 +190,15 @@ def find_latest_checkpoint(checkpoint_dir: str):
 
 def load_seal_model(cfg: dict):
     """
-    Load a FRESH base model then overlay the LoRA adapter.
-    We load fresh (not reusing the base_model object) so that
-    merge_and_unload() doesn't contaminate the baseline weights.
+    Load a FRESH base model then overlay the LoRA adapter from Drive.
+    Fresh load avoids any state bleed from the baseline evaluation.
+    Includes full diagnostics to surface missing-weight issues.
     """
     ckpt_path = cfg["explicit_checkpoint_path"] or find_latest_checkpoint(cfg["checkpoint_dir"])
 
     if not ckpt_path:
         print(f"\n⚠️  No checkpoint found in: {cfg['checkpoint_dir']}")
-        print("    Run the training script first to generate checkpoints.")
+        print("    Make sure SEAL training has run at least 1 epoch and Drive is mounted.")
         return None, None, None
 
     if not os.path.exists(ckpt_path):
@@ -209,9 +209,40 @@ def load_seal_model(cfg: dict):
     label = f"SEAL ({p.name})"
     print(f"\n⏳ Loading SEAL model from: {p.name}")
 
-    # Reload base model fresh — avoids any state bleed from baseline run
+    # ── Diagnostic: list checkpoint files ─────────────────────
+    ckpt_files = list(p.iterdir())
+    print(f"  📂 Files in checkpoint ({len(ckpt_files)} total):")
+    for f in sorted(ckpt_files):
+        size_mb = f.stat().st_size / (1024 * 1024)
+        print(f"      {f.name:<45} {size_mb:.2f} MB")
+
+    has_adapter_config = (p / "adapter_config.json").exists()
+    has_safetensors = (p / "adapter_model.safetensors").exists()
+    has_bin = (p / "adapter_model.bin").exists()
+    has_weights = has_safetensors or has_bin
+
+    if not has_adapter_config:
+        print("  ❌ adapter_config.json NOT found — not a valid PEFT checkpoint")
+        return None, None, None
+
+    if not has_weights:
+        print("  ❌ CRITICAL: adapter_model.safetensors / adapter_model.bin NOT found!")
+        print("     This means the Drive sync was incomplete during training.")
+        print("     The LoRA weight file was never saved to Drive.")
+        print("\n  🔧 How to fix:")
+        print("     1. Go back to your TRAINING Colab session")
+        print("     2. Run this to manually save the model to Drive:")
+        print("        model.save_pretrained('/content/drive/MyDrive/SEAL-DSA/checkpoints/checkpoint_epoch_manual')")
+        print("     3. Re-run this comparison script")
+        return None, None, None
+
+    print(f"  ✅ adapter_config.json : found")
+    print(f"  ✅ adapter weights     : found ({'safetensors' if has_safetensors else 'bin'})")
+
+    # ── Reload base model fresh ────────────────────────────────
     name = cfg["base_model"]
     bnb = _build_bnb_config(cfg)
+    print(f"\n  ⏳ Reloading fresh base model for SEAL...")
     fresh_base = AutoModelForCausalLM.from_pretrained(
         name,
         quantization_config=bnb,
@@ -225,22 +256,16 @@ def load_seal_model(cfg: dict):
         tokenizer.pad_token = tokenizer.eos_token
         fresh_base.config.pad_token_id = fresh_base.config.eos_token_id
 
-    if (p / "adapter_config.json").exists():
-        print("  → Detected LoRA adapter (adapter_config.json found)")
-        # is_trainable=False for inference-only — matches checkpoint.py save_pretrained pattern
+    # ── Load LoRA adapter ──────────────────────────────────────
+    import warnings
+    print("  ⏳ Applying LoRA adapter...")
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")  # Suppress verbose PEFT warnings
         model = PeftModel.from_pretrained(fresh_base, str(p), is_trainable=False)
-        model = model.merge_and_unload()
-        print("  → LoRA weights merged into base model")
-    else:
-        print("  → No adapter_config.json — loading as full saved model")
-        model = AutoModelForCausalLM.from_pretrained(
-            str(p),
-            quantization_config=bnb,
-            device_map="auto",
-            trust_remote_code=True,
-            torch_dtype=torch.float16,
-        )
 
+    print("  ⏳ Merging LoRA weights...")
+    model = model.merge_and_unload()
+    print("  ✅ LoRA merged successfully.")
     print("✅ SEAL model ready.")
     return model, tokenizer, label
 
@@ -268,10 +293,11 @@ def generate_answer(model, tokenizer, question: str, cfg: dict):
         out = model.generate(
             **inputs,
             max_new_tokens=cfg["max_new_tokens"],
-            do_sample=False,
-            temperature=0.3,
+            # do_sample=True lets temperature work; False = greedy (ignores temperature)
+            do_sample=True,
+            temperature=0.7,
+            top_p=0.9,
             pad_token_id=tokenizer.pad_token_id,
-            repetition_penalty=1.1,
         )
     elapsed = time.time() - t0
     answer = tokenizer.decode(out[0][inputs["input_ids"].shape[1]:], skip_special_tokens=True).strip()
@@ -392,6 +418,7 @@ def evaluate_model(model, tokenizer, eval_data: dict, cfg: dict, label: str) -> 
         "total_time_s": 0.0,
         "total_questions": 0,
         "timestamp": datetime.now().isoformat(),
+        "sample_answers": {},  # Store one sample answer per topic for visual check
     }
     all_scores = []
 
@@ -399,17 +426,21 @@ def evaluate_model(model, tokenizer, eval_data: dict, cfg: dict, label: str) -> 
         print(f"  📌 {topic} ({len(questions)} Qs) ...", end=" ", flush=True)
         scores = []
         t_total = 0.0
+        first_answer = None
 
-        for q in questions:
-            q["topic"] = topic  # inject for keyword scorer
+        for i, q in enumerate(questions):
+            q["topic"] = topic
             ans, t = generate_answer(model, tokenizer, q["question"], cfg)
             s = score_answer(ans, q)
             scores.append(s)
             t_total += t
+            if i == 0:
+                first_answer = (q["question"], ans)  # Save first Q&A for display
 
         avg = sum(scores) / len(scores) if scores else 0.0
         results["topics"][topic] = {"avg_score": round(avg, 4), "scores": scores}
         results["total_time_s"] += t_total
+        results["sample_answers"][topic] = first_answer
         all_scores.extend(scores)
         print(f"score = {avg:.3f}")
 
@@ -422,15 +453,46 @@ def evaluate_model(model, tokenizer, eval_data: dict, cfg: dict, label: str) -> 
 #  REPORT
 # =============================================================================
 
+def print_sample_answers(base_res: dict, seal_res: dict, topic: str = None):
+    """Print one sample Q&A from each model side-by-side to visually verify they differ."""
+    topics = list(base_res.get("sample_answers", {}).keys())
+    check_topic = topic or (topics[0] if topics else None)
+    if not check_topic:
+        return
+
+    print(f"\n{'═'*65}")
+    print(f"  🔎 SAMPLE ANSWER CHECK  (topic: {check_topic})")
+    print(f"  (Verify the two models give DIFFERENT answers)")
+    print(f"{'═'*65}")
+
+    base_qa = base_res["sample_answers"].get(check_topic)
+    seal_qa = seal_res["sample_answers"].get(check_topic) if seal_res else None
+
+    if base_qa:
+        print(f"\n  Q: {base_qa[0]}")
+        print(f"\n  📘 BASE MODEL answer:")
+        print(f"  {base_qa[1][:400]}..." if len(base_qa[1]) > 400 else f"  {base_qa[1]}")
+
+    if seal_qa:
+        print(f"\n  📗 SEAL MODEL answer:")
+        print(f"  {seal_qa[1][:400]}..." if len(seal_qa[1]) > 400 else f"  {seal_qa[1]}")
+
+    if base_qa and seal_qa:
+        if base_qa[1].strip() == seal_qa[1].strip():
+            print("\n  ⚠️  WARNING: Answers are IDENTICAL — LoRA weights may not have loaded!")
+        else:
+            print("\n  ✅ Answers differ — models are genuinely different.")
+    print(f"{'═'*65}")
+
+
 def print_report(base_res: dict, seal_res: dict):
     print("\n" + "=" * 65)
     print("  📊  SEAL-DSA  ·  COMPARISON RESULTS  (Base vs SEAL)")
     print("=" * 65)
 
     topics = list(base_res["topics"].keys())
-    C = 16  # column width
+    C = 16
 
-    # Header
     print(f"  {'Topic':<24} {'Base Model':>{C}} {'SEAL Model':>{C}} {'   Δ':>8}")
     print("  " + "─" * (24 + C + C + 9))
 
@@ -444,7 +506,6 @@ def print_report(base_res: dict, seal_res: dict):
 
     print("  " + "─" * (24 + C + C + 9))
 
-    # Overall row
     bo = base_res["overall_score"]
     so = seal_res["overall_score"]
     delta = so - bo
@@ -454,7 +515,6 @@ def print_report(base_res: dict, seal_res: dict):
     print(f"  {'⭐ OVERALL':<24} {bo:>{C}.3f} {so:>{C}.3f}  {arrow}{sign}{delta:.3f}")
     print("=" * 65)
 
-    # Summary
     print(f"\n  🎯 SEAL improvement  : {sign}{delta:.3f}  ({pct:+.1f}%)")
     print(f"  ⏱️  Base  eval time  : {base_res['total_time_s']:.1f}s  "
           f"({base_res['total_time_s']/max(base_res['total_questions'],1):.2f}s/q)")
@@ -510,6 +570,7 @@ def main():
 
     # 4. Print + save report
     print("\n[4/4] Generating report...")
+    print_sample_answers(base_res, seal_res)  # Visual diff check
     print_report(base_res, seal_res)
     save_report(base_res, seal_res)
 
