@@ -103,5 +103,5 @@ logging:
 # --- Hardware ---
 hardware:
   device: "auto" # auto, cuda, cpu
-  mixed_precision: true # FP16/BF16 training
+  mixed_precision: false # DISABLED — conflicts with 4-bit quantization
   max_memory_mb: 14000 # ~14GB for T4
