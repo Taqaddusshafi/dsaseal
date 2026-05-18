@@ -101,8 +101,13 @@ class BaselineComparison:
             scores = []
             
             for q in questions:
-                # Generate answer
-                prompt = f"Answer this DSA question:\n{q.question}\n\nAnswer:"
+                # Use chat template for prompt
+                messages = [
+                    {"role": "user", "content": f"Answer this DSA question:\n{q.question}"},
+                ]
+                prompt = self.tokenizer.apply_chat_template(
+                    messages, tokenize=False, add_generation_prompt=True
+                )
                 
                 try:
                     inputs = self.tokenizer(
@@ -116,8 +121,7 @@ class BaselineComparison:
                         outputs = model.generate(
                             **inputs,
                             max_new_tokens=256,
-                            temperature=0.3,
-                            do_sample=False,
+                            do_sample=False,  # Greedy decoding for reproducible eval
                             pad_token_id=self.tokenizer.pad_token_id,
                         )
                     

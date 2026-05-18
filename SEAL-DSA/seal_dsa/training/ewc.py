@@ -197,7 +197,11 @@ class EWC:
         """
         logger.info("Computing Fisher Information Matrix...")
         
-        model.eval()
+        # Bug 5 fix: Must be in train mode for proper gradient computation
+        # through dropout layers. Eval mode zeroes dropout which gives
+        # incorrect Fisher estimates.
+        was_training = model.training
+        model.train()
         fisher_dict = {}
         
         # Initialize Fisher to zeros for all trainable params
@@ -256,6 +260,10 @@ class EWC:
         
         self.initialized = True
         self.update_count += 1
+        
+        # Restore original training mode
+        if not was_training:
+            model.eval()
         
         # Log Fisher statistics
         fisher_norms = {

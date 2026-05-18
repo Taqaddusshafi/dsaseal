@@ -50,7 +50,7 @@ from torch.optim import AdamW
 from torch.optim.lr_scheduler import (
     CosineAnnealingLR, LinearLR, SequentialLR,
 )
-from torch.cuda.amp import autocast, GradScaler
+from torch.amp import autocast, GradScaler
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
 from seal_dsa.config import SEALDSAConfig
@@ -180,8 +180,15 @@ class ParameterUpdater:
             self.scheduler = decay_scheduler
         
         # ── Setup Mixed-Precision (AMP) ────────────────────────
-        self.use_amp = config.mixed_precision and torch.cuda.is_available()
-        self.scaler = GradScaler(enabled=self.use_amp)
+        # AMP must be disabled when using QLoRA — BitsAndBytes handles
+        # its own mixed-precision internally and wrapping in autocast
+        # causes dtype mismatches / NaN gradients.
+        self.use_amp = (
+            config.mixed_precision
+            and torch.cuda.is_available()
+            and not config.model.quantization_enabled
+        )
+        self.scaler = GradScaler(enabled=self.use_amp) if self.use_amp else None
         
         self.total_updates = 0
         self.total_loss = 0.0
@@ -235,54 +242,65 @@ class ParameterUpdater:
         total_loss = 0.0
         total_ewc_loss = 0.0
         num_batches = 0
+        grad_norm = 0.0  # Bug 6 fix: initialize before loop
         
         self.optimizer.zero_grad()
         
         for i in range(0, len(training_pairs), self.config.seal.batch_size):
             batch = training_pairs[i:i + self.config.seal.batch_size]
             
-            # Forward pass with optional mixed-precision
-            with autocast(enabled=self.use_amp):
+            if self.use_amp:
+                # AMP path (only when NOT using quantization)
+                with autocast(device_type="cuda"):
+                    batch_loss = self._compute_batch_loss(batch)
+                    if ewc_loss_fn is not None:
+                        ewc_loss = ewc_loss_fn(self.model)
+                        batch_loss = batch_loss + ewc_loss
+                        total_ewc_loss += ewc_loss.item()
+                    scaled_loss = batch_loss / self.config.seal.gradient_accumulation_steps
+                self.scaler.scale(scaled_loss).backward()
+            else:
+                # Standard path (used with QLoRA)
                 batch_loss = self._compute_batch_loss(batch)
-                
-                # Add EWC regularization if enabled
                 if ewc_loss_fn is not None:
                     ewc_loss = ewc_loss_fn(self.model)
                     batch_loss = batch_loss + ewc_loss
                     total_ewc_loss += ewc_loss.item()
-                
-                # Scale loss for gradient accumulation
                 scaled_loss = batch_loss / self.config.seal.gradient_accumulation_steps
-            
-            # Backward pass with gradient scaler
-            self.scaler.scale(scaled_loss).backward()
+                scaled_loss.backward()
             
             total_loss += batch_loss.item()
             num_batches += 1
             
             # Step optimizer after accumulation
             if num_batches % self.config.seal.gradient_accumulation_steps == 0:
-                # Unscale before clipping
-                self.scaler.unscale_(self.optimizer)
+                if self.use_amp:
+                    self.scaler.unscale_(self.optimizer)
                 grad_norm = torch.nn.utils.clip_grad_norm_(
                     [p for p in self.model.parameters() if p.requires_grad],
                     self.config.seal.max_grad_norm,
                 )
-                
-                self.scaler.step(self.optimizer)
-                self.scaler.update()
+                if self.use_amp:
+                    self.scaler.step(self.optimizer)
+                    self.scaler.update()
+                else:
+                    self.optimizer.step()
                 self.scheduler.step()
                 self.optimizer.zero_grad()
         
         # Handle remaining gradients
-        if num_batches % self.config.seal.gradient_accumulation_steps != 0:
-            self.scaler.unscale_(self.optimizer)
+        if num_batches > 0 and num_batches % self.config.seal.gradient_accumulation_steps != 0:
+            if self.use_amp:
+                self.scaler.unscale_(self.optimizer)
             grad_norm = torch.nn.utils.clip_grad_norm_(
                 [p for p in self.model.parameters() if p.requires_grad],
                 self.config.seal.max_grad_norm,
             )
-            self.scaler.step(self.optimizer)
-            self.scaler.update()
+            if self.use_amp:
+                self.scaler.step(self.optimizer)
+                self.scaler.update()
+            else:
+                self.optimizer.step()
             self.scheduler.step()
             self.optimizer.zero_grad()
         
@@ -340,28 +358,26 @@ class ParameterUpdater:
                     "output": answer,
                     "weight": score,
                 })
-            else:
-                # ── Corrective Example ──────────────────────────
-                # Include feedback to create a corrected response
-                corrected_prompt = (
-                    f"The following answer had issues: {result.feedback}\n"
-                    f"Question: {question}\n"
-                    f"Improve the answer focusing on: {result.feedback}"
-                )
-                training_pairs.append({
-                    "input": self._format_training_input(question),
-                    "output": f"Let me provide a better answer.\n{answer}",
-                    "weight": max(0.1, score),  # Don't fully suppress
-                })
+            # Bug 8 fix: Skip low-scoring answers entirely.
+            # Previously these were trained with a "Let me provide a better
+            # answer" prefix prepended to the SAME wrong answer, which just
+            # taught the model to reproduce its own mistakes.
         
         return training_pairs
     
     def _format_training_input(self, question: str) -> str:
-        """Format question as training input with appropriate template."""
-        return (
-            f"You are an expert in Data Structures and Algorithms. "
-            f"Answer the following question thoroughly.\n\n"
-            f"Question: {question}\n\nAnswer:"
+        """Format question as training input using the model's chat template.
+        
+        Bug 7 fix: Qwen2.5-Instruct uses <|im_start|>/<|im_end|> tokens.
+        Training with raw text meant LoRA weights were tuned to a prompt
+        format the model never sees during inference.
+        """
+        messages = [
+            {"role": "system", "content": "You are an expert in Data Structures and Algorithms."},
+            {"role": "user", "content": f"Answer the following question thoroughly.\n\nQuestion: {question}"},
+        ]
+        return self.tokenizer.apply_chat_template(
+            messages, tokenize=False, add_generation_prompt=True
         )
     
     def _compute_batch_loss(
@@ -378,38 +394,46 @@ class ParameterUpdater:
           - xᵢ is the input (question)
           - yᵢ is the target (answer)
           - wᵢ is the quality weight from the evaluator
+        
+        Bug 3+4 fix: Tokenize input and output separately then
+        concatenate IDs, so the label mask boundary is exact
+        regardless of BPE merges at the junction.
         """
-        total_loss = torch.tensor(0.0, device=self.model.device)
+        losses = []
         
         for item in batch:
-            full_text = item["input"] + " " + item["output"]
-            
-            encodings = self.tokenizer(
-                full_text,
-                return_tensors="pt",
-                truncation=True,
-                max_length=self.config.model.max_length,
-                padding=True,
-            ).to(self.model.device)
-            
-            # Create labels (mask the input portion)
-            input_len = len(self.tokenizer.encode(
+            # Tokenize input and output SEPARATELY to get an exact boundary
+            input_ids = self.tokenizer.encode(
                 item["input"], add_special_tokens=False
-            ))
-            labels = encodings["input_ids"].clone()
-            labels[0, :input_len] = -100  # Mask input tokens
+            )
+            output_ids = self.tokenizer.encode(
+                item["output"], add_special_tokens=False
+            )
+            
+            # Concatenate and truncate
+            all_ids = input_ids + output_ids
+            all_ids = all_ids[:self.config.model.max_length]
+            
+            input_ids_tensor = torch.tensor(
+                [all_ids], device=self.model.device
+            )
+            attention_mask = torch.ones_like(input_ids_tensor)
+            
+            # Create labels — mask the input portion with -100
+            labels = input_ids_tensor.clone()
+            labels[0, :len(input_ids)] = -100
             
             outputs = self.model(
-                input_ids=encodings["input_ids"],
-                attention_mask=encodings["attention_mask"],
+                input_ids=input_ids_tensor,
+                attention_mask=attention_mask,
                 labels=labels,
             )
             
             # Weight loss by evaluation score
             weighted_loss = outputs.loss * item.get("weight", 1.0)
-            total_loss = total_loss + weighted_loss
+            losses.append(weighted_loss)
         
-        return total_loss / len(batch)
+        return torch.stack(losses).mean()
     
     # ==================================================================
     #  NOVEL CONTRIBUTION: Contrastive Self-Play with DPO Loss

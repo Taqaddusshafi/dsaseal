@@ -150,6 +150,8 @@ class ForgettingDetector:
         report = {
             "per_topic": {},
             "max_forgetting": 0.0,
+            "avg_forgetting": 0.0,
+            "total_topics": 0,
             "worst_topic": None,
             "topics_at_risk": [],
         }
@@ -181,6 +183,15 @@ class ForgettingDetector:
             
             if forgetting > self.threshold:
                 report["topics_at_risk"].append(topic)
+        
+        # Bug 12 fix: Populate avg_forgetting and total_topics keys
+        # that EWC.adapt_lambda() reads. Previously these were missing
+        # so dynamic lambda adaptation was completely non-functional.
+        all_forgetting = [v["forgetting"] for v in report["per_topic"].values()]
+        report["avg_forgetting"] = (
+            sum(all_forgetting) / len(all_forgetting) if all_forgetting else 0.0
+        )
+        report["total_topics"] = len(report["per_topic"])
         
         # Log results
         if report["topics_at_risk"]:
@@ -226,16 +237,19 @@ class ForgettingDetector:
                 matches = sum(1 for kw in expected_kws if kw.lower() in answer_lower)
                 keyword_score = min(1.0, matches / max(len(expected_kws) * 0.5, 1))
                 
-                # Also check if any code is present and valid
+                # Bug 10 fix: Search for code in the ORIGINAL answer,
+                # not the lowercased version. Lowercasing Python code
+                # (e.g. TreeNode → treenode, True → true) makes
+                # ast.parse() fail on valid code.
                 code_bonus = 0.0
                 if "def " in answer_lower or "```" in answer_lower:
                     import ast
                     import re
-                    code_match = re.search(r'```python(.*?)```', answer_lower, re.DOTALL)
+                    code_match = re.search(r'```python(.*?)```', answer, re.DOTALL)
                     if not code_match:
-                        code_match = re.search(r'```(.*?)```', answer_lower, re.DOTALL)
+                        code_match = re.search(r'```(.*?)```', answer, re.DOTALL)
                     if not code_match:
-                        code_match = re.search(r'(def\s+\w+.*)', answer_lower, re.DOTALL)
+                        code_match = re.search(r'(def\s+\w+.*)', answer, re.DOTALL)
                     
                     if code_match:
                         code = code_match.group(1).strip() if code_match else ""
@@ -260,8 +274,13 @@ class ForgettingDetector:
         question: str,
         max_tokens: int = 128,
     ) -> str:
-        """Get a quick answer from the model."""
-        prompt = f"Answer briefly: {question}\n\nAnswer:"
+        """Get a quick answer from the model using chat template."""
+        messages = [
+            {"role": "user", "content": f"Answer briefly: {question}"},
+        ]
+        prompt = tokenizer.apply_chat_template(
+            messages, tokenize=False, add_generation_prompt=True
+        )
         
         try:
             inputs = tokenizer(
@@ -271,10 +290,11 @@ class ForgettingDetector:
                 max_length=256,
             ).to(model.device)
             
+            # Bug 16 fix: Removed contradictory temperature=0.3 with
+            # do_sample=False. Greedy decoding ignores temperature.
             outputs = model.generate(
                 **inputs,
                 max_new_tokens=max_tokens,
-                temperature=0.3,
                 do_sample=False,  # Greedy for consistency
                 pad_token_id=tokenizer.pad_token_id,
             )

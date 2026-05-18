@@ -202,12 +202,29 @@ class QuestionGenerator:
         difficulty: str,
         question_type: str,
     ) -> Optional[str]:
-        """Generate a single question using the LLM."""
-        prompt = QUESTION_GENERATION_PROMPT.format(
-            topic=topic,
-            subtopic=subtopic,
-            difficulty=difficulty,
-            question_type=question_type,
+        """Generate a single question using the LLM with chat template."""
+        system_msg = "You are an expert Data Structures and Algorithms instructor creating exam questions."
+        user_msg = (
+            f"Topic: {topic}\n"
+            f"Subtopic: {subtopic}\n"
+            f"Difficulty: {difficulty}\n"
+            f"Question Type: {question_type}\n\n"
+            f"Generate a clear, specific, real-world DSA interview question that tests "
+            f"understanding of the given topic.\n\n"
+            f"Requirements:\n"
+            f"- The question should read exactly like a LeetCode problem description.\n"
+            f"- Include a specific, clear problem statement.\n"
+            f"- Explain the input and output constraints clearly.\n"
+            f"- Provide at least one Example with Input and Output.\n"
+            f"- Target a {difficulty} difficulty level.\n\n"
+            f"Generate ONLY the question and its examples, nothing else."
+        )
+        messages = [
+            {"role": "system", "content": system_msg},
+            {"role": "user", "content": user_msg},
+        ]
+        prompt = self.tokenizer.apply_chat_template(
+            messages, tokenize=False, add_generation_prompt=True
         )
         
         try:
@@ -247,10 +264,23 @@ class QuestionGenerator:
         """Generate multiple questions in a single LLM call (more efficient)."""
         topic_info = DSA_TOPICS.get(topic, {})
         
-        prompt = BATCH_GENERATION_PROMPT.format(
-            num_questions=num_questions,
-            topic=topic_info.get("name", topic),
-            topic_description=topic_info.get("description", ""),
+        system_msg = "You are an expert DSA instructor."
+        user_msg = (
+            f"Generate {num_questions} diverse questions about {topic_info.get('name', topic)}.\n\n"
+            f"Requirements:\n"
+            f"- Mix of conceptual, coding, and analytical questions\n"
+            f"- Vary difficulty from easy to hard\n"
+            f"- Each question should be clearly separated\n"
+            f"- Questions should cover different subtopics within {topic_info.get('name', topic)}\n\n"
+            f"Format each question as:\nQ1: [question text]\nQ2: [question text]\n...\n\n"
+            f"Topic details: {topic_info.get('description', '')}"
+        )
+        messages = [
+            {"role": "system", "content": system_msg},
+            {"role": "user", "content": user_msg},
+        ]
+        prompt = self.tokenizer.apply_chat_template(
+            messages, tokenize=False, add_generation_prompt=True
         )
         
         try:

@@ -130,12 +130,25 @@ class SEALDSAConfig:
     curriculum: CurriculumConfig = field(default_factory=CurriculumConfig)
     checkpoint: CheckpointConfig = field(default_factory=CheckpointConfig)
     device: str = "auto"
-    mixed_precision: bool = True
+    mixed_precision: bool = False
     log_level: str = "INFO"
+
+
+def _deep_merge(base: dict, override: dict) -> dict:
+    """Recursively merge override dict into base dict."""
+    result = base.copy()
+    for key, value in override.items():
+        if key in result and isinstance(result[key], dict) and isinstance(value, dict):
+            result[key] = _deep_merge(result[key], value)
+        else:
+            result[key] = value
+    return result
 
 
 def load_config(config_path: str) -> SEALDSAConfig:
     """Load configuration from YAML file.
+    
+    Supports hierarchical configs via `_base_` directive.
     
     Args:
         config_path: Path to the YAML configuration file.
@@ -145,6 +158,15 @@ def load_config(config_path: str) -> SEALDSAConfig:
     """
     with open(config_path, 'r') as f:
         raw = yaml.safe_load(f)
+    
+    # Handle _base_ inheritance
+    if '_base_' in raw:
+        base_path = raw.pop('_base_')
+        config_dir = os.path.dirname(os.path.abspath(config_path))
+        base_full = os.path.join(config_dir, base_path)
+        with open(base_full, 'r') as f:
+            base_raw = yaml.safe_load(f)
+        raw = _deep_merge(base_raw, raw)
     
     config = SEALDSAConfig()
     

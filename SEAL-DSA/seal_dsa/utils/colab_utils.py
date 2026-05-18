@@ -66,7 +66,7 @@ def get_gpu_info() -> dict:
             info["available"] = True
             info["name"] = torch.cuda.get_device_name(0)
             
-            total = torch.cuda.get_device_properties(0).total_mem / 1024**3
+            total = torch.cuda.get_device_properties(0).total_memory / 1024**3
             allocated = torch.cuda.memory_allocated(0) / 1024**3
             
             info["memory_total"] = f"{total:.1f} GB"

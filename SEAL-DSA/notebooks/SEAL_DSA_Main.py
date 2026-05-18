@@ -84,9 +84,15 @@ if torch.cuda.is_available():
 # Cell 4: Quick Test - Verify Model Works
 # ============================================================
 
-print("\n--- Quick Model Test ---")
-test_prompt = "Explain what a binary search tree is in one sentence."
-inputs = tokenizer(test_prompt, return_tensors="pt").to(model.device)
+print("\n--- Quick Model Test (chat template) ---")
+test_question = "Explain what a binary search tree is in one sentence."
+test_messages = [
+    {"role": "user", "content": test_question},
+]
+test_prompt = tokenizer.apply_chat_template(
+    test_messages, tokenize=False, add_generation_prompt=True
+)
+inputs = tokenizer(test_prompt, return_tensors="pt", truncation=True, max_length=512).to(model.device)
 
 with torch.no_grad():
     outputs = model.generate(
@@ -98,7 +104,7 @@ with torch.no_grad():
     )
 
 response = tokenizer.decode(outputs[0][inputs['input_ids'].shape[1]:], skip_special_tokens=True)
-print(f"Prompt: {test_prompt}")
+print(f"Prompt: {test_question}")
 print(f"Response: {response[:200]}")
 
 # ============================================================
@@ -138,14 +144,16 @@ print(f"  EWC enabled: {config.ewc.enabled}")
 start_epoch = 0
 latest_ckpt = checkpoint_mgr.get_latest_checkpoint()
 
-if latest_ckpt:
-    print(f"Found checkpoint: {latest_ckpt}")
-    user_input = input("Resume from checkpoint? [y/n]: ").strip().lower()
-    if user_input == 'y':
-        start_epoch = checkpoint_mgr.load(latest_ckpt, model, updater.optimizer)
-        print(f"Resumed from epoch {start_epoch}")
-    else:
-        print("Starting fresh training")
+# Set RESUME=1 env var to auto-resume, or RESUME=0 to start fresh.
+# Default: auto-resume if checkpoint exists.
+auto_resume = os.environ.get("RESUME", "1").strip() != "0"
+
+if latest_ckpt and auto_resume:
+    print(f"Found checkpoint: {latest_ckpt} — auto-resuming")
+    start_epoch = checkpoint_mgr.load(latest_ckpt, model, updater.optimizer)
+    print(f"Resumed from epoch {start_epoch}")
+elif latest_ckpt:
+    print(f"Found checkpoint: {latest_ckpt} — RESUME=0 set, starting fresh")
 else:
     print("No checkpoint found. Starting fresh training.")
 

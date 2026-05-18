@@ -37,3 +37,4 @@ checkpoint:
 
 hardware:
   max_memory_mb: 12000 # Conservative for free tier
+  mixed_precision: false # DISABLED - conflicts with 4-bit quantization
