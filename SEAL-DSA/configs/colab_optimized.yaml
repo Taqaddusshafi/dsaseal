@@ -21,7 +21,7 @@ lora:
   lora_dropout: 0.1 # Higher dropout for small data
 
 seal:
-  num_epochs: 1 # Test run — verify LoRA updates work
+  num_epochs: 5 # Full run — resume trains remaining epochs (e.g. 2,3,4)
   questions_per_topic: 20 # Train on more varied problems
   batch_size: 2 # Keep small for Colab RAM
   gradient_accumulation_steps: 8 # Keep effective batch = 16
