@@ -170,10 +170,19 @@ class MetricsTracker:
         """Print a formatted summary to the logger."""
         summary = self.get_summary()
         topic_summary = self.get_topic_summary()
-        
+
         logger.info("\n" + "=" * 60)
         logger.info("EXPERIMENT SUMMARY")
         logger.info("=" * 60)
+
+        # No metrics recorded this run (e.g. resumed past the last epoch,
+        # so the training loop body never executed).
+        if "total_steps" not in summary:
+            logger.info("  No training steps recorded this run.")
+            logger.info("  (Resumed at or past the final epoch — nothing left to train.)")
+            logger.info("=" * 60)
+            return
+
         logger.info(f"  Total training steps: {summary['total_steps']}")
         logger.info(f"  Total epochs: {summary['total_epochs']}")
         logger.info(f"  Topics trained: {summary['topics_trained']}")
