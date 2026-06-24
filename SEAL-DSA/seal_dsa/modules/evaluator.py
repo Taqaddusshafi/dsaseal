@@ -207,7 +207,11 @@ class DSAEvaluator:
         correctness = self._score_correctness(answer_text, topic)
         completeness = self._score_completeness(answer_text, question_text, topic)
         complexity = self._score_complexity(answer_text, topic)
-        code = self._score_code(answer_text, answer.question.question_type)
+        # Code scoring extracts and EXECUTES the answer, so it must use the
+        # original-case text. Lowercasing breaks valid Python (True/False/None
+        # → NameError, corrupted identifiers/string literals), which would
+        # under-score correct code and poison the training signal.
+        code = self._score_code(answer.answer, answer.question.question_type)
         explanation = self._score_explanation(answer_text)
 
         # Use adaptive weights

@@ -10,13 +10,19 @@ base model frozen.
 Mathematical Foundation:
 ========================
 
-Loss Function (Novel: Hybrid CE + DPO):
-  L_total = L_CE + λ_dpo · L_DPO + λ_ewc · L_EWC
+Default Loss Function (as implemented in `update()`):
+  L_total = L_CE + λ_ewc · L_EWC
 
   where:
     L_CE  = CrossEntropy(model(question), correct_answer)
-    L_DPO = -log σ(β · (log π(y_w|x) - log π(y_l|x)))  [DPO loss]
     L_EWC = (λ/2) Σᵢ Fᵢ(θᵢ - θ*ᵢ)²  (if EWC enabled)
+
+Optional Contrastive Objective (Novel: DPO):
+  When ≥2 ranked answers exist per question, `compute_dpo_loss()`
+  adds a Direct Preference Optimization term:
+    L_DPO = -log σ(β · (log π(y_w|x) - log π(y_l|x)))
+  This is NOT part of the default `update()` path — it is exposed as
+  a separate method so experiments can opt in. See `compute_dpo_loss`.
 
 Direct Preference Optimization (DPO):
   Given a question x, chosen answer y_w, rejected answer y_l:
