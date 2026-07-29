@@ -551,7 +551,7 @@ def main():
     print("\n[STEP 2/4] Discovering checkpoints...")
     checkpoints = find_checkpoints(args.checkpoint_dir)
 
-    # 3. Load base model once (shared backbone for LoRA models)
+    # 3. Load base model for the baseline pass
     print("\n[STEP 3/4] Loading base model...")
     base_model, tokenizer = load_base_model(args.model_name, use_quantize=not args.no_quantize)
 
@@ -567,21 +567,36 @@ def main():
     )
     all_results.append(base_result)
 
-    # 4B. Evaluate each checkpoint
+    # Drop the baseline copy — each checkpoint needs untouched base weights.
+    del base_model
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
+
+    # 4B. Evaluate each checkpoint on a FRESHLY loaded base model.
+    #
+    # The base model must be reloaded per checkpoint: load_checkpoint_model()
+    # calls merge_and_unload(), which folds the adapter into the base weights
+    # in place. Reusing one base_model across the loop would stack every
+    # adapter, so checkpoint N would be measured as base + ckpt_0 + ... + ckpt_N
+    # instead of base + ckpt_N.
     for ckpt_path in checkpoints:
         print(f"\n{'─'*70}")
         print(f"  Evaluating checkpoint: {ckpt_path.name}")
         print(f"{'─'*70}")
 
-        # Load LoRA on top of base (re-use base weights)
         try:
-            ckpt_model = load_checkpoint_model(base_model, ckpt_path)
+            fresh_base, tokenizer = load_base_model(
+                args.model_name, use_quantize=not args.no_quantize
+            )
+            ckpt_model = load_checkpoint_model(fresh_base, ckpt_path)
             result = evaluate_model(
                 ckpt_model, tokenizer, eval_data, args.max_new_tokens,
                 label=ckpt_path.name
             )
             all_results.append(result)
-            del ckpt_model  # Free memory
+            del ckpt_model, fresh_base
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
         except Exception as e:
             print(f"  [ERROR] Failed to load {ckpt_path.name}: {e}")
             continue
