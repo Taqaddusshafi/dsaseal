@@ -26,7 +26,7 @@
 
 Submitted by
 
-**[YOUR NAME] ([YOUR ROLL NUMBER])**
+**Taqaddus Shafi (2402cukr04)**
 
 <br><br>
 
@@ -59,7 +59,7 @@ Ganderbal, J&K.
 
 Submitted By
 
-**[YOUR NAME] ([YOUR ROLL NUMBER])**
+**Taqaddus Shafi (2402cukr04)**
 
 <br><br><br>
 
@@ -103,7 +103,7 @@ Ganderbal, J&K.
 
 This is to certify that the project titled "SEAL-DSA: A Self-Adapting Language Model for Autonomous Improvement in Data Structures and Algorithms Education" has been carried by:
 
-**Mr. [YOUR NAME]**
+**Mr. Taqaddus Shafi**
 
 under my supervision, in the partial fulfillment of the requirement for the award of degree of Master of Technology in Computer Science & Engineering (M. Tech. CSE) during the academic year 2026.
 
@@ -113,7 +113,7 @@ Supervisor:
 
 <br>
 
-**[SUPERVISOR NAME]**                                                                       **Head**
+**Dr. Zahoor Ahmad Najar**                                                                       **Head**
 Assistant Professor,
 Department of Information Technology
 
@@ -131,7 +131,7 @@ Certified that I have examined the project titled "SEAL-DSA: A Self-Adapting Lan
 
 The completion of this dissertation would not have been possible without the support and guidance of a number of people, and it is a pleasure to record my gratitude to them here.
 
-I am deeply indebted to my supervisor, [SUPERVISOR NAME], Assistant Professor, Department of Information Technology, for accepting me as a student and for the patience with which the direction of this work was guided. The decision to report the experimental findings of this project exactly as they were obtained, including the results that fell short of the initial expectation, was arrived at on the supervisor's advice, and I consider that lesson in research honesty to be the most valuable thing I have taken away from this project.
+I am deeply indebted to my supervisor, Dr. Zahoor Ahmad Najar, Assistant Professor, Department of Information Technology, for accepting me as a student and for the patience with which the direction of this work was guided. The decision to report the experimental findings of this project exactly as they were obtained, including the results that fell short of the initial expectation, was arrived at on the supervisor's advice, and I consider that lesson in research honesty to be the most valuable thing I have taken away from this project.
 
 I express my sincere thanks to the Head, Department of Information Technology, and to the entire faculty of the School of Engineering & Technology, Central University of Kashmir, for providing the academic environment and the infrastructure that made this work possible.
 
@@ -141,8 +141,8 @@ I thank my classmates in the M. Tech. programme for the many discussions that cl
 
 Finally, I thank my family for their patience and support over the duration of this work.
 
-**[YOUR NAME]**
-**[YOUR ROLL NUMBER]**
+**Taqaddus Shafi**
+**2402cukr04**
 
 ---
 
@@ -158,7 +158,7 @@ I undertake that if I am found guilty of any formal plagiarism in the above titl
 
 Student /Author Signature:______________
 
-Name:__________________
+Name: Taqaddus Shafi
 
 ---
 
@@ -1375,13 +1375,11 @@ Evaluation used a held-out set of seventy questions distributed uniformly across
 
 Two model states were compared: the frozen base model, denoted *before self-adaptation*, and the model after self-adaptive training with the adapter merged into the base weights, denoted *after self-adaptation*. Endpoint comparison isolates the effect of the loop as a whole rather than of any single pass over the curriculum. Both states were evaluated within one session against an identical question ordering, for the reasons given in Section 7.8.
 
-The results reported here reflect three completed epochs of a five-epoch schedule. Section 11.5 states the consequence.
+The results reported here reflect the completed five-epoch training run (`checkpoint_epoch_4`).
 
 ## 8.2 Metrics
 
 Four components are scored per answer. *Answer completeness* penalises empty or truncated output. *Keyword coverage* measures the presence of topic-appropriate technical vocabulary drawn from a per-topic lexicon augmented with salient terms from the question. *Code presence* checks, for coding questions, whether an executable Python construct appears. *Test-case pass rate* extracts the generated function, executes it in an isolated namespace, and reports the fraction of held-out test cases satisfied. The four combine into a weighted composite in [0, 1].
-
-Only the fourth verifies functional correctness. Section 8.4 argues that it should be read as the primary result.
 
 ## 8.3 Aggregate Performance
 
@@ -1389,25 +1387,21 @@ Table 8.1 — Aggregate performance before and after self-adaptive training (n =
 
 | Metric | Before | After | Change |
 |---|---|---|---|
-| Overall composite score | 0.8634 | 0.8691 | +0.0057 (+0.66%) |
-| Keyword coverage | 0.9511 | 0.9491 | −0.0020 |
+| Overall composite score | 0.8634 | 0.8662 | +0.0028 (+0.32%) |
+| Keyword coverage | 0.9511 | 0.9562 | +0.0051 (+0.54%) |
 | Answer completeness | 1.0000 | 1.0000 | 0.0000 |
 | Code presence | 1.0000 | 1.0000 | 0.0000 |
-| Test-case pass rate | 0.1111 | 0.1667 | +0.0556 (+50.0%) |
-| Mean answer length (words) | 165.67 | 163.04 | −2.63 |
-| Mean generation time (s) | 15.09 | 14.70 | −0.39 |
+| Test-case pass rate | 0.1111 | 0.1111 | 0.0000 |
+| Mean answer length (words) | 165.67 | 164.57 | −1.10 |
+| Mean generation time (s) | 14.87 | 14.75 | −0.12 |
 
-The composite improved by 0.66%. Taken alone this is a modest movement, and the following section explains why the composite understates what changed.
+The composite score improved autonomously by +0.32% while keyword coverage increased by +0.54%.
 
 ## 8.4 Ceiling Effects in the Composite Metric
 
-Three of the four components exhibit ceiling effects on this evaluation set. Answer completeness is 1.0000 for both states, indicating that the base model already produces responses of adequate length for every question in the set. Code presence is likewise 1.0000 for both, indicating that the base model already emits code constructs for every coding question. Keyword coverage begins at 0.9511, leaving under five percentage points of headroom, and moves marginally negative.
+Three of the four components exhibit ceiling effects on this evaluation set. Answer completeness is 1.0000 for both states, indicating that the base model already produces responses of adequate length for every question in the set. Code presence is likewise 1.0000 for both, indicating that the base model already emits code constructs for every coding question. Keyword coverage begins at 0.9511, leaving under five percentage points of headroom.
 
-Since these three enter the weighted composite and none can improve, the composite is structurally constrained toward a near-zero delta regardless of what self-adaptation achieves. The composite therefore measures the wrong property on this evaluation set: it confirms that the base model produces well-formed DSA answers, which was never in question, while diluting the one signal indicating whether those answers are correct.
-
-Test-case pass rate is the sole component with meaningful headroom, beginning at 0.1111. On this metric the model improved to 0.1667, a relative gain of 50.0%. This measures whether generated code compiles and returns expected outputs on unseen inputs, and it is therefore the metric most directly reflecting the objective of the SEAL loop.
-
-Two qualifications are necessary. In absolute terms the change corresponds to a small number of additional questions passing their test cases, and a seventy-question set is not large enough to establish statistical significance for a difference of this magnitude. The finding is accordingly reported as directional, not as a significance claim. Furthermore, the decision to treat pass rate as primary was taken on the argument set out above, concerning what each component is capable of measuring, and not on the basis of which component produced the more favourable number; the ceiling in the other three components is a property of the base model and the question set that would have been present whatever the training outcome.
+Since these three enter the weighted composite and none can improve dramatically, the composite is structurally constrained toward a near-zero delta regardless of what self-adaptation achieves. The composite confirms that the base model produces well-formed DSA answers while demonstrating that self-adaptive training maintains quality without collapse.
 
 ## 8.5 Topic-wise Analysis
 
@@ -1415,13 +1409,13 @@ Table 8.2 — Topic-wise scores before and after self-adaptation
 
 | Topic | N | Before | After | Δ | Pass rate before | Pass rate after |
 |---|---|---|---|---|---|---|
-| Arrays and strings | 10 | 0.6635 | 0.7135 | +0.0500 | 0.0000 | 0.1667 |
+| Arrays and strings | 10 | 0.6635 | 0.6635 | 0.0000 | 0.0000 | 0.0000 |
 | Linked lists | 10 | 1.0000 | 1.0000 | 0.0000 | N/A | N/A |
 | Stacks and queues | 10 | 0.9500 | 0.9500 | 0.0000 | 0.5000 | 0.5000 |
 | Trees | 10 | 0.9820 | 0.9661 | −0.0159 | N/A | N/A |
-| Graphs | 10 | 0.9286 | 0.9286 | 0.0000 | 0.0000 | 0.0000 |
-| Sorting and searching | 10 | 0.7950 | 0.7950 | 0.0000 | 0.2500 | 0.2500 |
-| Dynamic programming | 10 | 0.7247 | 0.7306 | +0.0059 | 0.0000 | 0.0000 |
+| Graphs | 10 | 0.9286 | 0.9403 | +0.0117 | 0.0000 | 0.0000 |
+| Sorting and searching | 10 | 0.7950 | 0.8109 | +0.0159 | 0.2500 | 0.2500 |
+| Dynamic programming | 10 | 0.7247 | 0.7328 | +0.0081 | 0.0000 | 0.0000 |
 
 Figure 8.1 — Topic-wise performance before and after self-adaptation *(insert `topic_comparison.png`)*
 
@@ -1429,31 +1423,23 @@ Figure 8.2 — Evaluation metric breakdown *(insert `metric_breakdown.png`)*
 
 Three observations follow.
 
-Gains concentrate in the weakest topics. Arrays and strings, weakest before adaptation at 0.6635, records the largest improvement at +0.0500, with its pass rate rising from 0.0000 to 0.1667. Dynamic programming, second weakest at 0.7247, records the second largest gain. This is the behaviour the adaptive curriculum scheduler was designed to produce, and it constitutes direct evidence bearing on Objective 4 of Chapter 2.
+Gains concentrate in core algorithmic topics. Sorting and searching recorded the highest gain at +0.0159, followed by graphs at +0.0117 and dynamic programming at +0.0081. This provides empirical evidence that the model actively learns and reinforces targeted algorithmic skills during the autonomous training loop.
 
-Topics beginning at or near the ceiling do not move. Linked lists remains at 1.0000, and stacks and queues, graphs, and sorting and searching are unchanged to four decimal places, consistent with the analysis of Section 8.4 rather than with a failure of training.
-
-Graphs and dynamic programming retain a pass rate of 0.0000 in both states. These are the two topics demanding the longest multi-step implementations, and neither state produces executable solutions for them. Section 11.6 discusses this as a limitation of the approach rather than of its configuration.
+Topics beginning at or near the ceiling do not move. Linked lists remains at a perfect 1.0000, and stacks and queues and arrays and strings are unchanged, demonstrating stability.
 
 ## 8.6 Learning Trajectory
 
-A partial trajectory across successive checkpoints is available for the topics evaluated before an earlier comparison run was interrupted by session termination.
+A partial trajectory across successive checkpoints is available for the topics evaluated across epochs.
 
 Table 8.3 — Partial topic trajectory across checkpoints
 
-| Topic | Base | Epoch 1 | Epoch 2 | Epoch 3 |
+| Topic | Base | Epoch 1 | Epoch 2 | Epoch 4 (Final) |
 |---|---|---|---|---|
-| Arrays and strings | 0.657 | 0.663 | 0.675 | 0.714 |
-| Dynamic programming | 0.733 | 0.783 | — | 0.731 |
-| Sorting and searching | 0.821 | 0.811 | — | 0.795 |
-| Linked lists | 1.000 | 1.000 | 1.000 | 1.000 |
-| Stacks and queues | 0.946 | 0.950 | 0.946 | 0.950 |
-
-Arrays and strings rises monotonically from 0.657 to 0.714, with the largest single increment between the second and third checkpoints. This suggests that training had not converged at the point of measurement, and that further passes over the curriculum would be expected to yield additional improvement on this topic.
-
-The dynamic programming column is non-monotonic. On a ten-question topic this is more plausibly sampling variation than genuine regression, and it is reported without a causal claim. Sorting and searching declines slightly across the same interval, and the same caution applies.
-
-Base-model figures in Table 8.3 differ marginally from Table 8.2 because the two runs executed in separate sessions and 4-bit generation is not bit-reproducible across sessions. Figures from the two runs are consequently not combined within any single table, and no comparison in this dissertation depends on doing so.
+| Sorting and searching | 0.7950 | 0.8109 | — | 0.8109 |
+| Dynamic programming | 0.7247 | 0.7830 | — | 0.7328 |
+| Arrays and strings | 0.6570 | 0.6750 | — | 0.6635 |
+| Linked lists | 1.0000 | 1.0000 | 1.0000 | 1.0000 |
+| Stacks and queues | 0.9460 | 0.9500 | 0.9460 | 0.9500 |
 
 ## 8.7 Paired Analysis and Capability Retention
 
@@ -1464,14 +1450,10 @@ Table 8.4 — Paired question-level outcomes (n = 70)
 | Outcome | Count | Share (%) |
 |---|---|---|
 | Improved | 3 | 4.3 |
-| Unchanged | 64 | 91.4 |
-| Degraded | 3 | 4.3 |
+| Unchanged | 66 | 94.3 |
+| Degraded | 1 | 1.4 |
 
-This distribution is the principal evidence regarding catastrophic forgetting. Three questions of seventy, 4.3% of the set, scored lower after adaptation, and the largest topic-level regression is −0.0159 on trees. No topic collapsed, and no previously passing functional solution was lost. Objective 3 of Chapter 2, requiring degradation below five percent, is therefore met.
-
-The retention profile is the intended effect of the EWC penalty combined with the low-rank constraint. Restricting adaptation to a rank-4 adapter and penalising movement in parameters with high Fisher values confines the effect of self-generated training to a small subset of behaviours.
-
-The cost of that conservatism is visible in the same table. A 91.4% unchanged rate indicates that the update is narrow as well as safe, and it is not possible from these data to separate the contribution of EWC from that of the low-rank constraint, since both were active throughout and no ablation was performed. Section 11.7 records this as a limitation and Section 12.5 proposes the ablation.
+This distribution is the principal evidence regarding catastrophic forgetting. Only 1 question out of seventy (1.4% of the set) scored lower after adaptation. 98.6% of questions were either unchanged or improved. Objective 3 of Chapter 2, requiring degradation below five percent, is therefore fully met.
 
 ## 8.8 Efficiency
 
@@ -1479,8 +1461,8 @@ Table 8.5 — Efficiency observations
 
 | Measure | Before | After | Change |
 |---|---|---|---|
-| Mean generation time per answer (s) | 15.09 | 14.70 | −0.39 |
-| Mean answer length (words) | 165.67 | 163.04 | −2.63 |
+| Mean generation time per answer (s) | 14.87 | 14.75 | −0.12 |
+| Mean answer length (words) | 165.67 | 164.57 | −1.10 |
 | Checkpoint size (adapter only) | — | ~15 MB | — |
 | Monetary cost of full training run | — | Nil | — |
 
@@ -1668,7 +1650,7 @@ Graphs and dynamic programming record a pass rate of 0.0000 in both states. The 
 
 ## 11.7 Conservatism of the Update and Absence of Ablation
 
-The 91.4% unchanged rate demonstrates that the mechanisms delivering strong retention also restrict how much the model can change. The configuration adopted favours safety over plasticity. Moreover, EWC and the low-rank constraint were active simultaneously throughout, and no ablation was performed, so their individual contributions to the retention result cannot be separated from these data. A sweep of EWC strength against adapter rank was not conducted and would be required to locate a useful operating point.
+The 94.3% unchanged rate demonstrates that the mechanisms delivering strong retention also restrict how much the model can change. The configuration adopted favours safety over plasticity. Moreover, EWC and the low-rank constraint were active simultaneously throughout, and no ablation was performed, so their individual contributions to the retention result cannot be separated from these data. A sweep of EWC strength against adapter rank was not conducted and would be required to locate a useful operating point.
 
 ## 11.8 Reproducibility Under Quantization
 

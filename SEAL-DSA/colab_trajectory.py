@@ -73,27 +73,41 @@ eval_data = load_eval_data(EVAL_DATA, limit=LIMIT)
 ckpts = find_checkpoints(CKPT_DIR)
 topics = list(eval_data.keys())
 
+# ── per-state result cache ──────────────────────────────────────────────────
+# Each model state is written to its own file the moment it finishes. If the
+# Colab session drops mid-run, rerunning the script skips whatever already
+# completed and resumes at the first missing state. Delete the cache dir to
+# force a clean re-evaluation.
+CACHE = OUT_DIR / "cache"; CACHE.mkdir(exist_ok=True)
+
+
+def evaluate_state(label, ckpt=None):
+    """Evaluate one model state, reusing a cached result if present."""
+    cached = CACHE / f"{label}.json"
+    if cached.exists():
+        rows = json.load(open(cached))
+        print(f"[CACHE] {label}: reusing {len(rows)} cached records")
+        return rows
+
+    print(f"\n=== Evaluating: {label} ===")
+    model, tokenizer = load_base_model(MODEL_NAME)
+    if ckpt is not None:
+        model = PeftModel.from_pretrained(model, str(ckpt)).merge_and_unload()
+    rows = run(model, tokenizer, eval_data, label)
+    json.dump(rows, open(cached, "w"), indent=2)
+    print(f"[CACHE] {label}: wrote {len(rows)} records to {cached}")
+    del model
+    torch.cuda.empty_cache()
+    return rows
+
+
 states = []          # [(label, rows), ...] in order
 all_rows = []
 
-# ── base model ──────────────────────────────────────────────────────────────
-print("\n=== Evaluating: base ===")
-model, tokenizer = load_base_model(MODEL_NAME)
-rows = run(model, tokenizer, eval_data, "base")
-states.append(("base", rows)); all_rows += rows
-del model
-torch.cuda.empty_cache()
-
-# ── each checkpoint, on a FRESH base each time ──────────────────────────────
-for ckpt in ckpts:
-    label = ckpt.name
-    print(f"\n=== Evaluating: {label} (fresh base) ===")
-    model, tokenizer = load_base_model(MODEL_NAME)
-    model = PeftModel.from_pretrained(model, str(ckpt)).merge_and_unload()
-    rows = run(model, tokenizer, eval_data, label)
-    states.append((label, rows)); all_rows += rows
-    del model
-    torch.cuda.empty_cache()
+for label, ckpt in [("base", None)] + [(c.name, c) for c in ckpts]:
+    rows = evaluate_state(label, ckpt)
+    states.append((label, rows))
+    all_rows += rows
 
 labels = [lbl for lbl, _ in states]
 

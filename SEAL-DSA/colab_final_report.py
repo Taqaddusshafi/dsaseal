@@ -19,7 +19,7 @@ Produces, in results_final/:
 Run from the SEAL-DSA root:  python colab_final_report.py
 """
 
-import json, csv, sys, statistics
+import json, csv, sys, statistics, argparse
 from pathlib import Path
 from datetime import datetime
 
@@ -34,12 +34,20 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
+parser = argparse.ArgumentParser(description="SEAL-DSA — Phase-level result collector")
+parser.add_argument("--epoch", type=int, default=None, help="Specific epoch number to evaluate (e.g. 2)")
+parser.add_argument("--checkpoint", "--ckpt", type=str, default=None, help="Name or path of specific checkpoint")
+parser.add_argument("--ckpt-dir", type=str, default="checkpoints", help="Directory containing checkpoints")
+parser.add_argument("--out-dir", type=str, default="results_final", help="Output directory")
+parser.add_argument("--limit", type=int, default=None, help="Limit questions per topic")
+args, _ = parser.parse_known_args()
+
 MODEL_NAME  = "Qwen/Qwen2.5-1.5B-Instruct"
 EVAL_DATA   = "data/evaluation_sets/dsa_eval_set.json"
-CKPT_DIR    = "checkpoints"
-OUT_DIR     = Path("results_final"); OUT_DIR.mkdir(exist_ok=True)
+CKPT_DIR    = args.ckpt_dir
+OUT_DIR     = Path(args.out_dir); OUT_DIR.mkdir(exist_ok=True)
 MAX_TOKENS  = 256
-LIMIT       = None          # e.g. 3 for a quick smoke test
+LIMIT       = args.limit
 
 
 def run(model, tokenizer, eval_data, label):
@@ -74,9 +82,37 @@ def mean(xs):
 eval_data = load_eval_data(EVAL_DATA, limit=LIMIT)
 ckpts = find_checkpoints(CKPT_DIR)
 if not ckpts:
-    sys.exit("No checkpoints found — nothing to compare against.")
-final_ckpt = ckpts[-1]
-print(f"[INFO] Using final checkpoint: {final_ckpt.name}")
+    sys.exit(f"No checkpoints found in '{CKPT_DIR}' — nothing to compare against.")
+
+selected_ckpt = None
+if args.checkpoint:
+    for c in ckpts:
+        if args.checkpoint == str(c) or args.checkpoint == c.name:
+            selected_ckpt = c
+            break
+    if not selected_ckpt:
+        for c in ckpts:
+            if args.checkpoint in c.name:
+                selected_ckpt = c
+                break
+    if not selected_ckpt:
+        sys.exit(f"Checkpoint '{args.checkpoint}' not found in {CKPT_DIR}. Available: {[c.name for c in ckpts]}")
+elif args.epoch is not None:
+    patterns = [f"epoch_{args.epoch}", f"epoch-{args.epoch}", f"epoch{args.epoch}", f"ep{args.epoch}", f"-{args.epoch}"]
+    for c in ckpts:
+        if any(p in c.name.lower() for p in patterns):
+            selected_ckpt = c
+            break
+    if not selected_ckpt:
+        if 1 <= args.epoch <= len(ckpts):
+            selected_ckpt = ckpts[args.epoch - 1]
+        else:
+            sys.exit(f"Epoch {args.epoch} not found. Available checkpoints: {[c.name for c in ckpts]}")
+else:
+    selected_ckpt = ckpts[-1]
+
+final_ckpt = selected_ckpt
+print(f"[INFO] Using checkpoint: {final_ckpt.name}")
 
 base_model, tokenizer = load_base_model(MODEL_NAME)
 
