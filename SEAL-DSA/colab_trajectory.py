@@ -23,7 +23,7 @@ Outputs, in results_trajectory/:
     learning_curve.png   overall + per-topic score against epoch
 """
 
-import json, csv, sys, statistics
+import json, csv, sys, statistics, argparse
 from pathlib import Path
 from datetime import datetime
 
@@ -40,12 +40,18 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
+parser = argparse.ArgumentParser(description="SEAL-DSA — learning-curve collector")
+parser.add_argument("--ckpt-dir", type=str, default="checkpoints", help="Directory containing checkpoints")
+parser.add_argument("--out-dir", type=str, default="results_trajectory", help="Output directory")
+parser.add_argument("--limit", type=int, default=None, help="Limit questions per topic")
+args, _ = parser.parse_known_args()
+
 MODEL_NAME = "Qwen/Qwen2.5-1.5B-Instruct"
 EVAL_DATA  = "data/evaluation_sets/dsa_eval_set.json"
-CKPT_DIR   = "checkpoints"
-OUT_DIR    = Path("results_trajectory"); OUT_DIR.mkdir(exist_ok=True)
+CKPT_DIR   = args.ckpt_dir
+OUT_DIR    = Path(args.out_dir); OUT_DIR.mkdir(exist_ok=True)
 MAX_TOKENS = 256
-LIMIT      = None       # e.g. 2 for a smoke test
+LIMIT      = args.limit
 
 
 def mean(xs):
